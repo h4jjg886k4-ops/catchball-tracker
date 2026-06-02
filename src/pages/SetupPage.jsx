@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ArrowLeft, ArrowRight, BookOpen, ChevronDown, ChevronUp, Save, Check } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ArrowRight, BookOpen, ChevronDown, ChevronUp, Save, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
+import { saveTeamFS } from '../utils/firestore';
 import { POSITIONS, VIEWS } from '../utils/constants';
 
 const POSITION_LIST = Object.values(POSITIONS);
@@ -138,24 +140,41 @@ function SavedTeamsPanel({ type, accentColor, onLoad, t }) {
 
 // ── Save Team button ─────────────────────────────────────────────────────
 function SaveTeamButton({ teamName, players, type, isHome, t }) {
-  const { dispatch } = useMatch();
-  const [flash, setFlash] = useState(false);
+  const { state, dispatch } = useMatch();
+  const { user } = useAuth();
+  const [flash, setFlash]     = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [saveErr, setSaveErr] = useState(null);
+
   const validPlayers = players.filter(p => isHome ? (p.name?.trim() && p.number) : p.number);
   const canSave = teamName.trim() && validPlayers.length > 0;
 
-  function handleSave() {
-    if (!canSave) return;
-    dispatch({
-      type: 'UPSERT_TEAM',
-      team: {
-        id: uuidv4(),
-        name: teamName.trim(),
-        players: validPlayers.map(p => ({ ...p })),
-        type,
-      },
-    });
-    setFlash(true);
-    setTimeout(() => setFlash(false), 1500);
+  async function handleSave() {
+    if (!canSave || saving) return;
+    setSaveErr(null);
+    setSaving(true);
+
+    const existing = state.savedTeams.find(
+      s => s.type === type && s.name.toLowerCase() === teamName.trim().toLowerCase()
+    );
+    const teamEntry = {
+      id: existing?.id || uuidv4(),
+      name: teamName.trim(),
+      players: validPlayers.map(p => ({ ...p })),
+      type,
+      savedAt: Date.now(),
+    };
+
+    try {
+      if (user) await saveTeamFS(user.uid, teamEntry);
+      dispatch({ type: 'UPSERT_TEAM', team: teamEntry });
+      setFlash(true);
+      setTimeout(() => setFlash(false), 2000);
+    } catch (err) {
+      setSaveErr(err.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
   }
 
   const color = isHome
@@ -163,23 +182,32 @@ function SaveTeamButton({ teamName, players, type, isHome, t }) {
     : 'border-red-800 text-red-400 hover:bg-red-900/30';
 
   return (
-    <button
-      className={`w-full mt-3 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
-        flash
-          ? 'border-green-700 text-green-400 bg-green-900/20'
-          : canSave
-          ? color
-          : 'border-slate-700 text-slate-600 cursor-not-allowed'
-      }`}
-      onClick={handleSave}
-      disabled={!canSave}
-    >
-      {flash ? (
-        <><Check size={15} /> {t('teamSaved')}</>
-      ) : (
-        <><Save size={15} /> {t('saveTeam')}</>
+    <div className="mt-3">
+      <button
+        className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+          flash
+            ? 'border-green-700 text-green-400 bg-green-900/20'
+            : canSave
+            ? color
+            : 'border-slate-700 text-slate-600 cursor-not-allowed'
+        }`}
+        onClick={handleSave}
+        disabled={!canSave || saving}
+      >
+        {saving ? (
+          <><Loader2 size={15} className="animate-spin" /> {t('saving') || 'Saving…'}</>
+        ) : flash ? (
+          <><Check size={15} /> {t('teamSaved')}</>
+        ) : (
+          <><Save size={15} /> {t('saveTeam')}</>
+        )}
+      </button>
+      {saveErr && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-red-400 text-xs">
+          <AlertCircle size={12} /> {saveErr}
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -190,13 +218,13 @@ export default function SetupPage() {
 
   const [homeTeamName, setHomeTeamName] = useState('');
   const [oppTeamName,  setOppTeamName]  = useState('');
-  const [players,    setPlayers]    = useState([{ id: uuidv4(), name: '', number: '', position: '' }]);
-  const [oppPlayers, setOppPlayers] = useState([{ id: uuidv4(), name: '', number: '' }]);
+  const [players,    setPlayers]    = useState([{ id: uuidv4(), name: '', number: '1', position: '' }]);
+  const [oppPlayers, setOppPlayers] = useState([{ id: uuidv4(), name: '', number: '1' }]);
   const [tab,   setTab]   = useState('home');
   const [error, setError] = useState('');
 
   // ── Home team handlers ──────────────────────────────────────────────────
-  function addPlayer()           { setPlayers(prev => [...prev, { id: uuidv4(), name: '', number: '', position: '' }]); }
+  function addPlayer()           { setPlayers(prev => [...prev, { id: uuidv4(), name: '', number: String(prev.length + 1), position: '' }]); }
   function updatePlayer(updated) { setPlayers(prev => prev.map(p => p.id === updated.id ? updated : p)); }
   function removePlayer(id)      { setPlayers(prev => prev.filter(p => p.id !== id)); }
 
@@ -207,7 +235,7 @@ export default function SetupPage() {
   }
 
   // ── Opponent handlers ───────────────────────────────────────────────────
-  function addOppPlayer()            { setOppPlayers(prev => [...prev, { id: uuidv4(), name: '', number: '' }]); }
+  function addOppPlayer()            { setOppPlayers(prev => [...prev, { id: uuidv4(), name: '', number: String(prev.length + 1) }]); }
   function updateOppPlayer(updated)  { setOppPlayers(prev => prev.map(p => p.id === updated.id ? updated : p)); }
   function removeOppPlayer(id)       { setOppPlayers(prev => prev.filter(p => p.id !== id)); }
 

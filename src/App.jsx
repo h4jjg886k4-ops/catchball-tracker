@@ -16,7 +16,7 @@ function LangToggle() {
   return (
     <button
       onClick={() => setLang(lang === 'en' ? 'he' : 'en')}
-      className="fixed top-2 right-2 z-50 px-3 py-1 rounded-full bg-slate-700 border border-slate-600 text-slate-200 text-sm font-bold hover:bg-slate-600 transition-colors shadow-lg"
+      className="fixed top-2 left-2 z-50 px-3 py-1 rounded-full bg-slate-700 border border-slate-600 text-slate-200 text-sm font-bold hover:bg-slate-600 transition-colors shadow-lg"
       style={{ direction: 'ltr' }}
     >
       {t('langToggleLabel')}

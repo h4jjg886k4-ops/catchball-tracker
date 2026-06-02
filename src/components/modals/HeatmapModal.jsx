@@ -57,73 +57,9 @@ function drawCourtBase(ctx, w, h, topLabel, bottomLabel) {
   ctx.textAlign = 'center';
   ctx.fillText(topLabel, w / 2, margin + 14);
   ctx.fillText(bottomLabel, w / 2, h - 6);
-}
 
-function generateHeatmap(ctx, endpoints, w, h) {
-  if (!endpoints || endpoints.length === 0) return;
-
-  const offscreen = document.createElement('canvas');
-  offscreen.width = w;
-  offscreen.height = h;
-  const octx = offscreen.getContext('2d');
-
-  const radius = Math.min(w, h) / 6;
-
-  endpoints.forEach(pt => {
-    if (!pt) return;
-    const px = pt.x * w;
-    const py = pt.y * h;
-    const gradient = octx.createRadialGradient(px, py, 0, px, py, radius);
-    gradient.addColorStop(0,   'rgba(255,  80,   0, 0.7)');
-    gradient.addColorStop(0.3, 'rgba(255, 200,   0, 0.4)');
-    gradient.addColorStop(0.6, 'rgba(  0, 100, 255, 0.2)');
-    gradient.addColorStop(1,   'rgba(  0,   0, 255, 0)');
-    octx.fillStyle = gradient;
-    octx.beginPath();
-    octx.arc(px, py, radius, 0, Math.PI * 2);
-    octx.fill();
-  });
-
-  ctx.globalAlpha = 0.85;
-  ctx.drawImage(offscreen, 0, 0);
-  ctx.globalAlpha = 1;
-
-  endpoints.forEach(pt => {
-    if (!pt) return;
-    const px = pt.x * w;
-    const py = pt.y * h;
-    ctx.fillStyle = '#ff4500';
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(px, py, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  });
-}
-
-function countZones(pts, w, h) {
-  const margin = 20;
-  const cw = w - margin * 2;
-  const zones = { '4': 0, '3': 0, '2': 0, '5': 0, '6': 0, '1': 0 };
-  pts.forEach(pt => {
-    if (!pt || pt.y < 0.5) return;
-    const relX = (pt.x * w - margin) / cw;
-    const relY = (pt.y * h - h / 2) / (h / 2 - margin);
-    const col = relX < 0.33 ? 0 : relX < 0.67 ? 1 : 2;
-    const row = relY < 0.5 ? 0 : 1;
-    const zoneMap = [[4, 3, 2], [5, 6, 1]];
-    const z = zoneMap[row]?.[col];
-    if (z) zones[z] = (zones[z] || 0) + 1;
-  });
-  return zones;
-}
-
-function drawZoneLabels(ctx, zones, w, h) {
-  const margin = 20;
-  const cw = w - margin * 2;
-  const attackOffset = (h - margin * 2) * 0.25;
-  const positions = [
+  // Zone labels (faint)
+  const zonePositions = [
     { z: '4', x: margin + cw / 6,     y: h / 2 + attackOffset / 2 },
     { z: '3', x: margin + cw / 2,     y: h / 2 + attackOffset / 2 },
     { z: '2', x: margin + cw * 5 / 6, y: h / 2 + attackOffset / 2 },
@@ -131,19 +67,174 @@ function drawZoneLabels(ctx, zones, w, h) {
     { z: '6', x: margin + cw / 2,     y: h - margin - attackOffset / 2 },
     { z: '1', x: margin + cw * 5 / 6, y: h - margin - attackOffset / 2 },
   ];
-  positions.forEach(({ z, x, y }) => {
-    const count = zones[z] || 0;
-    if (count === 0) return;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.font = `bold ${Math.max(11, w / 22)}px sans-serif`;
+  zonePositions.forEach(({ z, x, y }) => ctx.fillText(z, x, y));
+}
+
+// Draw a single arrow from (sx,sy) to (ex,ey) with arrowhead
+function drawArrow(ctx, sx, sy, ex, ey, color, lineWidth) {
+  const angle = Math.atan2(ey - sy, ex - sx);
+  const headLen = Math.max(10, lineWidth * 3.5);
+
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = 1;
+
+  // Shaft
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - headLen * Math.cos(angle - 0.42), ey - headLen * Math.sin(angle - 0.42));
+  ctx.lineTo(ex - headLen * Math.cos(angle + 0.42), ey - headLen * Math.sin(angle + 0.42));
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Extract start+end from a drawing. startPt = first point of first path.
+function extractArrow(drawing) {
+  const firstPath = drawing.paths?.[0];
+  if (!firstPath || firstPath.points.length === 0) return null;
+  const startPt = firstPath.points[0];
+  const endPt   = drawing.endPoint;
+  if (!startPt || !endPt) return null;
+  return { startPt, endPt };
+}
+
+// Group arrows that share similar direction + end position into clusters.
+function clusterArrows(drawings, w, h) {
+  const arrows = drawings.map(extractArrow).filter(Boolean);
+  if (arrows.length === 0) return [];
+
+  const used = new Set();
+  const groups = [];
+  const threshold = Math.min(w, h) * 0.15;
+  const cosThresh = Math.cos(Math.PI / 9); // 20-degree cone
+
+  for (let i = 0; i < arrows.length; i++) {
+    if (used.has(i)) continue;
+    const group = [i];
+    used.add(i);
+
+    const a = arrows[i];
+    const dax = a.endPt.x - a.startPt.x;
+    const day = a.endPt.y - a.startPt.y;
+    const lenA = Math.sqrt(dax * dax + day * day);
+
+    for (let j = i + 1; j < arrows.length; j++) {
+      if (used.has(j)) continue;
+      const b = arrows[j];
+      const dbx = b.endPt.x - b.startPt.x;
+      const dby = b.endPt.y - b.startPt.y;
+      const lenB = Math.sqrt(dbx * dbx + dby * dby);
+
+      const dotNorm = (lenA > 0 && lenB > 0)
+        ? (dax * dbx + day * dby) / (lenA * lenB)
+        : 1;
+
+      const endDistPx = Math.sqrt(
+        ((a.endPt.x - b.endPt.x) * w) ** 2 +
+        ((a.endPt.y - b.endPt.y) * h) ** 2
+      );
+
+      if (dotNorm >= cosThresh && endDistPx < threshold) {
+        group.push(j);
+        used.add(j);
+      }
+    }
+
+    const avgStart = {
+      x: group.reduce((s, idx) => s + arrows[idx].startPt.x, 0) / group.length,
+      y: group.reduce((s, idx) => s + arrows[idx].startPt.y, 0) / group.length,
+    };
+    const avgEnd = {
+      x: group.reduce((s, idx) => s + arrows[idx].endPt.x, 0) / group.length,
+      y: group.reduce((s, idx) => s + arrows[idx].endPt.y, 0) / group.length,
+    };
+    groups.push({ count: group.length, avgStart, avgEnd });
+  }
+
+  return groups;
+}
+
+function generateArrows(ctx, drawings, w, h) {
+  if (!drawings || drawings.length === 0) return;
+
+  const clusters = clusterArrows(drawings, w, h);
+
+  // Draw thin orange singles first, then bold red on top
+  const singles  = clusters.filter(c => c.count === 1);
+  const repeated = clusters.filter(c => c.count >= 2);
+
+  singles.forEach(c => {
+    const sx = c.avgStart.x * w;
+    const sy = c.avgStart.y * h;
+    const ex = c.avgEnd.x * w;
+    const ey = c.avgEnd.y * h;
+    drawArrow(ctx, sx, sy, ex, ey, '#f97316', 2);
+  });
+
+  repeated.forEach(c => {
+    const sx = c.avgStart.x * w;
+    const sy = c.avgStart.y * h;
+    const ex = c.avgEnd.x * w;
+    const ey = c.avgEnd.y * h;
+    drawArrow(ctx, sx, sy, ex, ey, '#ef4444', 5);
+
+    // Count badge at endpoint
+    ctx.fillStyle = 'rgba(239,68,68,0.95)';
     ctx.beginPath();
-    ctx.arc(x, y, 18, 0, Math.PI * 2);
+    ctx.arc(ex, ey, 11, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = 'white';
-    ctx.font = `bold ${Math.max(12, w / 25)}px sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(count, x, y);
+    ctx.fillText(String(c.count), ex, ey);
   });
+}
+
+function drawLegend(ctx, w, h) {
+  const padX = 10, padY = 10;
+  const bw = 148, bh = 52;
+  const bx = w - padX - bw;
+  const by = h - padY - bh;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(bx, by, bw, bh, 6);
+  } else {
+    ctx.rect(bx, by, bw, bh);
+  }
+  ctx.fill();
+
+  // Red line sample
+  const lx1 = bx + 10, lx2 = bx + 36, ly1 = by + 16;
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(lx1, ly1); ctx.lineTo(lx2, ly1); ctx.stroke();
+  ctx.fillStyle = '#ef4444';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('repeated pattern', lx2 + 6, ly1);
+
+  // Orange line sample
+  const ly2 = by + 36;
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(lx1, ly2); ctx.lineTo(lx2, ly2); ctx.stroke();
+  ctx.fillStyle = '#f97316';
+  ctx.fillText('single attack', lx2 + 6, ly2);
 }
 
 export default function HeatmapModal() {
@@ -153,13 +244,12 @@ export default function HeatmapModal() {
   const canvasRef = useRef(null);
   const [activeTab, setActiveTab] = useState('attacks');
 
-  const setIndex = currentMatch ? currentMatch.currentSetIndex : 0;
-  const currentSet = currentMatch?.sets[setIndex];
+  const setIndex      = currentMatch ? currentMatch.currentSetIndex : 0;
+  const currentSet    = currentMatch?.sets[setIndex];
   const attackDrawings  = currentSet?.attackDrawings  || [];
   const blockingDrawings = currentSet?.blockingDrawings || [];
 
-  const activeDrawings  = activeTab === 'attacks' ? attackDrawings : blockingDrawings;
-  const activeEndpoints = activeDrawings.map(d => d.endPoint).filter(Boolean);
+  const activeDrawings = activeTab === 'attacks' ? attackDrawings : blockingDrawings;
 
   const attackLabels   = { top: t('courtOpponentAttacks'), bottom: t('courtHomeDefense') };
   const blockingLabels = { top: t('courtBlockingMistakes'), bottom: t('courtBlockingPosition') };
@@ -173,10 +263,12 @@ export default function HeatmapModal() {
     canvas.width  = rect.width;
     canvas.height = rect.height;
     const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawCourtBase(ctx, canvas.width, canvas.height, activeLabels.top, activeLabels.bottom);
-    generateHeatmap(ctx, activeEndpoints, canvas.width, canvas.height);
-    const zoneCount = countZones(activeEndpoints, canvas.width, canvas.height);
-    drawZoneLabels(ctx, zoneCount, canvas.width, canvas.height);
+    if (activeDrawings.length > 0) {
+      generateArrows(ctx, activeDrawings, canvas.width, canvas.height);
+      drawLegend(ctx, canvas.width, canvas.height);
+    }
   }, [showHeatmap, activeTab, attackDrawings.length, blockingDrawings.length]);
 
   function handleDownload() {
@@ -192,7 +284,7 @@ export default function HeatmapModal() {
   if (!showHeatmap) return null;
 
   const noDataKey = activeTab === 'attacks' ? 'noAttackDrawings' : 'noBlockingDrawings';
-  const countKey  = activeTab === 'attacks' ? 'attacksRecorded' : 'blockingDrawingsCount';
+  const countKey  = activeTab === 'attacks' ? 'attacksRecorded'  : 'blockingDrawingsCount';
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-slate-900 animate-fade-in">
@@ -253,9 +345,6 @@ export default function HeatmapModal() {
         </div>
       ) : (
         <>
-          <div className="text-center text-slate-500 text-xs py-1 flex-shrink-0">
-            {t('heatmapLegend')}
-          </div>
           <div className="flex-1 relative mx-3 mb-2 rounded-xl overflow-hidden border border-slate-700">
             <canvas ref={canvasRef} className="w-full h-full" />
           </div>
