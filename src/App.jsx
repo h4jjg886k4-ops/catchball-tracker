@@ -1,7 +1,10 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { MatchProvider, useMatch } from './context/MatchContext';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 import { VIEWS } from './utils/constants';
+import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import SetupPage from './pages/SetupPage';
 import LiveMatchPage from './pages/LiveMatchPage';
@@ -22,31 +25,76 @@ function LangToggle() {
 }
 
 function AppContent() {
-  const { state } = useMatch();
+  const { state, dataLoading, dataError, setDataError } = useMatch();
+  const { t } = useLanguage();
+
+  if (dataLoading) {
+    return (
+      <div className="h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={40} className="animate-spin text-blue-400 mx-auto mb-3" />
+          <p className="text-slate-400 text-sm">{t('dataLoading')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (dataError) {
+    return (
+      <div className="h-screen bg-slate-900 flex items-center justify-center px-6">
+        <div className="text-center max-w-sm">
+          <p className="text-red-400 mb-4">{t('dataError')}</p>
+          <button
+            className="btn-3d btn-3d-blue px-6 py-3 text-sm font-semibold"
+            onClick={() => setDataError(null)}
+          >
+            {t('retry')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   switch (state.view) {
-    case VIEWS.SETUP:
-      return <SetupPage />;
-    case VIEWS.LIVE:
-      return <LiveMatchPage />;
-    case VIEWS.STATS:
-      return <StatsPage />;
-    case VIEWS.HISTORY:
-      return <HistoryPage />;
-    default:
-      return <HomePage />;
+    case VIEWS.SETUP:   return <SetupPage />;
+    case VIEWS.LIVE:    return <LiveMatchPage />;
+    case VIEWS.STATS:   return <StatsPage />;
+    case VIEWS.HISTORY: return <HistoryPage />;
+    default:            return <HomePage />;
   }
+}
+
+function AuthGate() {
+  const { user, authLoading } = useAuth();
+
+  if (authLoading) {
+    return (
+      <div className="h-screen bg-slate-900 flex items-center justify-center">
+        <Loader2 size={40} className="animate-spin text-blue-400" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return (
+    <MatchProvider>
+      <LangToggle />
+      <AppContent />
+    </MatchProvider>
+  );
 }
 
 export default function App() {
   return (
-    <LanguageProvider>
-      <MatchProvider>
+    <AuthProvider>
+      <LanguageProvider>
         <div className="dark">
-          <LangToggle />
-          <AppContent />
+          <AuthGate />
         </div>
-      </MatchProvider>
-    </LanguageProvider>
+      </LanguageProvider>
+    </AuthProvider>
   );
 }

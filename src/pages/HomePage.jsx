@@ -1,12 +1,14 @@
 import React from 'react';
-import { Trophy, Plus, BarChart2, History } from 'lucide-react';
+import { Trophy, Plus, BarChart2, History, LogOut } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 import { VIEWS } from '../utils/constants';
 
 export default function HomePage() {
   const { state, dispatch, navigate } = useMatch();
   const { t } = useLanguage();
+  const { user, signOut } = useAuth();
   const { matches, currentMatch } = state;
 
   const recentMatches = matches.slice(0, 3);
@@ -22,8 +24,21 @@ export default function HomePage() {
         backgroundColor: '#0f172a',
       }}
     >
+      {/* User bar */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-1">
+        <span className="text-slate-400 text-xs truncate max-w-[70%]">
+          {user?.displayName || user?.email}
+        </span>
+        <button
+          className="btn-3d btn-3d-slate flex items-center gap-1.5 text-xs px-3 py-1.5"
+          onClick={signOut}
+        >
+          <LogOut size={13} /> {t('logout')}
+        </button>
+      </div>
+
       {/* Hero */}
-      <div className="bg-slate-900/30 px-6 pt-12 pb-8 text-center">
+      <div className="bg-slate-900/30 px-6 pt-6 pb-8 text-center">
         <div className="w-16 h-16 rounded-2xl bg-blue-700 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-900/50">
           <Trophy size={32} className="text-white" />
         </div>

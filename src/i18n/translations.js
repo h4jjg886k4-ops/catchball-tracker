@@ -10,6 +10,29 @@ export const translations = {
   // ── Language toggle ───────────────────────────────────────────────────────
   langToggleLabel:     { en: 'עברית', he: 'EN' },
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  login:                   { en: 'Login',                        he: 'התחברות' },
+  signUp:                  { en: 'Sign Up',                      he: 'הרשמה' },
+  logout:                  { en: 'Logout',                       he: 'התנתקות' },
+  email:                   { en: 'Email',                        he: 'אימייל' },
+  password:                { en: 'Password',                     he: 'סיסמה' },
+  continueWithGoogle:      { en: 'Continue with Google',         he: 'המשך עם גוגל' },
+  continueWithApple:       { en: 'Continue with Apple',          he: 'המשך עם אפל' },
+  orEmail:                 { en: 'or',                           he: 'או' },
+  welcome:                 { en: 'Welcome',                      he: 'ברוך הבא' },
+  noAccount:               { en: "Don't have an account?",       he: 'אין לך חשבון?' },
+  alreadyHaveAccount:      { en: 'Already have an account?',     he: 'כבר יש לך חשבון?' },
+  loggedInAs:              { en: 'Signed in as',                 he: 'מחובר כ' },
+  authErrInvalidCredential:{ en: 'Incorrect email or password.',  he: 'אימייל או סיסמה שגויים.' },
+  authErrEmailInUse:       { en: 'Email already in use.',         he: 'האימייל כבר בשימוש.' },
+  authErrWeakPassword:     { en: 'Password must be at least 6 characters.', he: 'סיסמה חייבת להכיל לפחות 6 תווים.' },
+  authErrInvalidEmail:     { en: 'Invalid email address.',        he: 'כתובת אימייל לא תקינה.' },
+  authErrPopupBlocked:     { en: 'Popup was blocked. Allow popups and try again.', he: 'חלון קופץ נחסם. אפשר חלונות קופצים ונסה שוב.' },
+  authErrGeneric:          { en: 'Authentication failed. Please try again.', he: 'ההתחברות נכשלה. אנא נסה שוב.' },
+  dataLoading:             { en: 'Loading your data…',            he: 'טוען נתונים…' },
+  dataError:               { en: 'Failed to load data.',          he: 'שגיאה בטעינת נתונים.' },
+  retry:                   { en: 'Retry',                         he: 'נסה שוב' },
+
   // ── App mode toggle ───────────────────────────────────────────────────────
   back:              { en: 'Back',                  he: 'חזרה' },
   gameMode:          { en: 'Game Mode',             he: 'מצב משחק' },

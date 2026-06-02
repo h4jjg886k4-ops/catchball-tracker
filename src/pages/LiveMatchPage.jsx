@@ -9,7 +9,6 @@ import ScoreHeader from '../components/ui/ScoreHeader';
 import RotationView from '../components/ui/RotationView';
 import EventButtons from '../components/ui/EventButtons';
 import GameModeButtons from '../components/ui/GameModeButtons';
-import { loadAppMode, saveAppMode } from '../utils/storage';
 import SubstitutionModal from '../components/modals/SubstitutionModal';
 import CourtDrawModal from '../components/modals/CourtDrawModal';
 import HeatmapModal from '../components/modals/HeatmapModal';
@@ -25,11 +24,10 @@ export default function LiveMatchPage() {
   const [showRotationSetup, setShowRotationSetup] = useState(false);
   const [activeTab, setActiveTab] = useState('players');
   const [showEndSetConfirm, setShowEndSetConfirm] = useState(false);
-  const [appMode, setAppMode] = useState(() => loadAppMode());
+  const appMode = state.appMode;
 
   function switchMode(mode) {
-    setAppMode(mode);
-    saveAppMode(mode);
+    dispatch({ type: 'SET_APP_MODE', mode });
   }
 
   if (!currentMatch) {

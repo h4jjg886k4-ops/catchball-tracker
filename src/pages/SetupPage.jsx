@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { POSITIONS, VIEWS } from '../utils/constants';
-import { loadSavedTeams, upsertSavedTeam, deleteSavedTeam } from '../utils/storage';
 
 const POSITION_LIST = Object.values(POSITIONS);
 
@@ -75,13 +74,14 @@ function OppPlayerRow({ player, onUpdate, onRemove, t }) {
 }
 
 // ── Saved teams panel ─────────────────────────────────────────────────────
-// `teams` and `setTeams` are owned by SetupPage so saves are reflected immediately.
-function SavedTeamsPanel({ type, accentColor, onLoad, teams, setTeams, t }) {
+function SavedTeamsPanel({ type, accentColor, onLoad, t }) {
+  const { state, dispatch } = useMatch();
   const [open, setOpen] = useState(false);
 
+  const teams = state.savedTeams.filter(s => s.type === type);
+
   function handleDelete(teamId) {
-    const updated = deleteSavedTeam(teamId);
-    setTeams(updated.filter(saved => saved.type === type));
+    dispatch({ type: 'DELETE_TEAM_FROM_STATE', teamId });
   }
 
   const accent = accentColor === 'red'
@@ -137,20 +137,23 @@ function SavedTeamsPanel({ type, accentColor, onLoad, teams, setTeams, t }) {
 }
 
 // ── Save Team button ─────────────────────────────────────────────────────
-function SaveTeamButton({ teamName, players, type, isHome, onSave, t }) {
+function SaveTeamButton({ teamName, players, type, isHome, t }) {
+  const { dispatch } = useMatch();
   const [flash, setFlash] = useState(false);
   const validPlayers = players.filter(p => isHome ? (p.name?.trim() && p.number) : p.number);
   const canSave = teamName.trim() && validPlayers.length > 0;
 
   function handleSave() {
     if (!canSave) return;
-    const updated = upsertSavedTeam({
-      id: uuidv4(),
-      name: teamName.trim(),
-      players: validPlayers.map(p => ({ ...p })),
-      type,
+    dispatch({
+      type: 'UPSERT_TEAM',
+      team: {
+        id: uuidv4(),
+        name: teamName.trim(),
+        players: validPlayers.map(p => ({ ...p })),
+        type,
+      },
     });
-    onSave?.(updated);
     setFlash(true);
     setTimeout(() => setFlash(false), 1500);
   }
@@ -191,8 +194,6 @@ export default function SetupPage() {
   const [oppPlayers, setOppPlayers] = useState([{ id: uuidv4(), name: '', number: '' }]);
   const [tab,   setTab]   = useState('home');
   const [error, setError] = useState('');
-  const [homeTeams, setHomeTeams] = useState(() => loadSavedTeams().filter(s => s.type === 'home'));
-  const [oppTeams,  setOppTeams]  = useState(() => loadSavedTeams().filter(s => s.type === 'opponent'));
 
   // ── Home team handlers ──────────────────────────────────────────────────
   function addPlayer()           { setPlayers(prev => [...prev, { id: uuidv4(), name: '', number: '', position: '' }]); }
@@ -279,8 +280,7 @@ export default function SetupPage() {
         {/* ── My Team tab ──────────────────────────────────────────────── */}
         {tab === 'home' && (
           <div className="animate-fade-in">
-            {/* Saved teams panel */}
-            <SavedTeamsPanel type="home" accentColor="blue" onLoad={loadHomeTeam} teams={homeTeams} setTeams={setHomeTeams} t={t} />
+            <SavedTeamsPanel type="home" accentColor="blue" onLoad={loadHomeTeam} t={t} />
 
             {/* Team name */}
             <div className="mb-5">
@@ -320,15 +320,7 @@ export default function SetupPage() {
               </div>
             </div>
 
-            {/* Save team button */}
-            <SaveTeamButton
-              teamName={homeTeamName}
-              players={players}
-              type="home"
-              isHome
-              onSave={updated => setHomeTeams(updated.filter(s => s.type === 'home'))}
-              t={t}
-            />
+            <SaveTeamButton teamName={homeTeamName} players={players} type="home" isHome t={t} />
 
             <button
               className="w-full mt-4 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-semibold transition-colors"
@@ -342,8 +334,7 @@ export default function SetupPage() {
         {/* ── Opponent tab ─────────────────────────────────────────────── */}
         {tab === 'opponent' && (
           <div className="animate-fade-in">
-            {/* Saved teams panel */}
-            <SavedTeamsPanel type="opponent" accentColor="red" onLoad={loadOppTeam} teams={oppTeams} setTeams={setOppTeams} t={t} />
+            <SavedTeamsPanel type="opponent" accentColor="red" onLoad={loadOppTeam} t={t} />
 
             {/* Team name */}
             <div className="mb-5">
@@ -383,15 +374,7 @@ export default function SetupPage() {
               </div>
             </div>
 
-            {/* Save team button */}
-            <SaveTeamButton
-              teamName={oppTeamName}
-              players={oppPlayers}
-              type="opponent"
-              isHome={false}
-              onSave={updated => setOppTeams(updated.filter(s => s.type === 'opponent'))}
-              t={t}
-            />
+            <SaveTeamButton teamName={oppTeamName} players={oppPlayers} type="opponent" isHome={false} t={t} />
 
             <button
               className="w-full mt-6 py-4 rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold text-xl transition-colors active:scale-98 shadow-lg shadow-green-900/40"
