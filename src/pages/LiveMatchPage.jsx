@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowLeft, BarChart2, AlignLeft, Layers, StopCircle } from 'lucide-react';
+import { ArrowLeft, BarChart2, AlignLeft, Layers, StopCircle, UserPlus, X } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS, POSITION_ABBR, EVENT_CONFIG } from '../utils/constants';
@@ -24,6 +25,10 @@ export default function LiveMatchPage() {
   const [showRotationSetup, setShowRotationSetup] = useState(false);
   const [activeTab, setActiveTab] = useState('players');
   const [showEndSetConfirm, setShowEndSetConfirm] = useState(false);
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [newName,   setNewName]   = useState('');
+  const [newNumber, setNewNumber] = useState('');
+  const [addError,  setAddError]  = useState('');
   const appMode = state.appMode;
 
   function switchMode(mode) {
@@ -59,6 +64,22 @@ export default function LiveMatchPage() {
   function handleRotationSetupClose() {
     setShowRotationSetup(false);
     if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
+  }
+
+  function openAddPlayer() {
+    setNewName('');
+    setNewNumber(String(players.length + 1));
+    setAddError('');
+    setShowAddPlayer(true);
+  }
+
+  function handleAddPlayer() {
+    if (!newNumber.trim()) { setAddError(t('errJerseyRequired')); return; }
+    dispatch({
+      type: 'ADD_PLAYER_TO_MATCH',
+      player: { id: uuidv4(), name: newName.trim(), number: newNumber.trim(), position: '' },
+    });
+    setShowAddPlayer(false);
   }
 
   // ── bench computation ──────────────────────────────────────────────────────
@@ -176,9 +197,17 @@ export default function LiveMatchPage() {
         {activeTab === 'players' && (
           <div className="flex-1 min-h-0 flex flex-col px-2 pt-2 pb-1 gap-1.5 overflow-hidden">
 
-            {/* Hint */}
-            <div className="text-slate-600 text-[10px] uppercase tracking-wider px-0.5 flex-shrink-0">
-              {t('tapPlayerHint')}
+            {/* Hint + Add Player button */}
+            <div className="flex items-center justify-between flex-shrink-0 px-0.5">
+              <span className="text-slate-600 text-[10px] uppercase tracking-wider">
+                {t('tapPlayerHint')}
+              </span>
+              <button
+                className="flex items-center gap-1 text-[10px] font-bold text-green-400 hover:text-green-300 uppercase tracking-wider transition-colors"
+                onClick={openAddPlayer}
+              >
+                <UserPlus size={11} /> {t('addPlayer')}
+              </button>
             </div>
 
             {/* Active section label — only when bench exists */}
@@ -337,6 +366,82 @@ export default function LiveMatchPage() {
           <Layers size={22} /> {t('heatmap')}
         </button>
       </div>
+
+      {/* Add Player modal */}
+      {showAddPlayer && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          onClick={() => setShowAddPlayer(false)}
+        >
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="relative w-full max-w-sm bg-slate-800 rounded-2xl border border-slate-600 p-5 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold text-lg">{t('addPlayer')}</h3>
+              <button
+                className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors"
+                onClick={() => setShowAddPlayer(false)}
+              >
+                <X size={15} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              {/* Jersey number */}
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wider font-semibold block mb-1.5">
+                  {t('jerseyNumber')}
+                </label>
+                <input
+                  type="number"
+                  value={newNumber}
+                  onChange={e => { setNewNumber(e.target.value); setAddError(''); }}
+                  placeholder="#"
+                  min="1" max="99"
+                  autoFocus
+                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white text-xl font-bold text-center focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+              {/* Player name (optional) */}
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-wider font-semibold block mb-1.5">
+                  {t('playerName')}
+                </label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={e => { setNewName(e.target.value); setAddError(''); }}
+                  placeholder={t('nameOptional')}
+                  onKeyDown={e => e.key === 'Enter' && handleAddPlayer()}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+            </div>
+
+            {addError && (
+              <div className="text-red-400 text-xs mb-3">{addError}</div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                className="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors"
+                onClick={() => setShowAddPlayer(false)}
+              >
+                {t('cancel')}
+              </button>
+              <button
+                className="flex-1 btn-3d btn-3d-green py-3 text-white font-bold text-sm"
+                onClick={handleAddPlayer}
+              >
+                {t('add')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {selectedPlayerId && (appMode === 'game' ? <GameModeButtons /> : <EventButtons />)}

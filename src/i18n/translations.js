@@ -94,6 +94,8 @@ export const translations = {
   players:             { en: 'Players',                  he: 'שחקנים' },
   addPlayer:           { en: 'Add Player',               he: 'הוסף שחקן' },
   playerName:          { en: 'Player name',              he: 'שם שחקן' },
+  jerseyNumber:        { en: 'Jersey Number',            he: 'מספר חולצה' },
+  errJerseyRequired:   { en: 'Jersey number is required.', he: 'מספר חולצה חובה.' },
   positionShort:       { en: 'Pos',                      he: 'עמד' },
   nextOpponent:        { en: 'Next: Opponent',           he: 'הבא: יריב' },
   startMatch:          { en: '🏐 Start Match',           he: '🏐 התחל משחק' },
