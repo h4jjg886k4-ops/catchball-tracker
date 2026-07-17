@@ -5,6 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { VIEWS } from '../utils/constants';
 import { calcPlayerStats, calcTeamStats, calcSetStats } from '../utils/stats';
 import { exportToExcel, exportToPDF } from '../utils/export';
+import AnalysisTab from './AnalysisTab';
 
 function StatBadge({ value, label, color = 'default', size = 'md' }) {
   const colorClass = {
@@ -150,9 +151,10 @@ export default function StatsPage() {
   }
 
   const tabs = [
-    { id: 'overview', labelKey: 'overview' },
-    { id: 'players',  labelKey: 'players' },
-    { id: 'sets',     labelKey: 'setStatsLabel' },
+    { id: 'overview',  labelKey: 'overview' },
+    { id: 'players',   labelKey: 'players' },
+    { id: 'sets',      labelKey: 'setStatsLabel' },
+    { id: 'analysis',  labelKey: 'analysis' },
   ];
 
   return (
@@ -387,6 +389,13 @@ export default function StatsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Analysis tab */}
+        {activeTab === 'analysis' && (
+          <div className="animate-fade-in">
+            <AnalysisTab currentMatch={currentMatch} t={t} />
           </div>
         )}
 
