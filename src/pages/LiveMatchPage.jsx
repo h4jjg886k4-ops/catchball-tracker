@@ -21,7 +21,7 @@ const COURT_LAYOUT = [
 ];
 
 export default function LiveMatchPage() {
-  const { state, dispatch, navigate } = useMatch();
+  const { state, dispatch, navigate, forceSave } = useMatch();
   const { t } = useLanguage();
   const {
     currentMatch, selectedPlayerId,
@@ -72,7 +72,25 @@ export default function LiveMatchPage() {
   const courtPlayers = players.filter(p => currentOnCourt.has(p.id));
 
   function handlePlayerSelect(playerId) { dispatch({ type: 'SELECT_PLAYER', playerId }); }
-  function handleEndSet() { dispatch({ type: 'END_SET' }); setShowEndSetConfirm(false); }
+  async function handleEndSet() {
+    try {
+      await forceSave();
+      dispatch({ type: 'END_SET' });
+      setShowEndSetConfirm(false);
+    } catch {
+      // saveStatus.error is shown in the header — do not proceed
+    }
+  }
+
+  async function handleEndMatch() {
+    if (!confirm(t('endMatchConfirm'))) return;
+    try {
+      await forceSave();
+      dispatch({ type: 'END_MATCH' });
+    } catch {
+      alert(t('saveFailedAbort'));
+    }
+  }
   function handleRotationSetupClose() {
     setShowRotationSetup(false);
     if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
@@ -275,7 +293,7 @@ export default function LiveMatchPage() {
               </button>
               <button
                 className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-red-900/70 hover:bg-red-800 active:scale-95 border border-red-700/50 text-red-200 font-bold text-xs transition-all"
-                onClick={() => { if (confirm(t('endMatchConfirm'))) dispatch({ type: 'END_MATCH' }); }}
+                onClick={handleEndMatch}
               >
                 <StopCircle size={12} />
                 {t('endMatch')}

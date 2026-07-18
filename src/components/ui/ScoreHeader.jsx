@@ -4,7 +4,7 @@ import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
 
 export default function ScoreHeader() {
-  const { state, dispatch } = useMatch();
+  const { state, dispatch, saveStatus, forceSave } = useMatch();
   const { t } = useLanguage();
   const { currentMatch } = state;
   const [flashHome, setFlashHome] = useState(false);
@@ -173,6 +173,32 @@ export default function ScoreHeader() {
           </div>
 
         </div>
+      </div>
+
+      {/* ── Auto-save indicator ────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-3 pb-1.5" dir="ltr">
+        <span className={`text-[9px] font-semibold leading-none ${
+          saveStatus.error ? 'text-red-400' : 'text-slate-600'
+        }`}>
+          {saveStatus.error
+            ? `⚠ ${t('saveFailed')}`
+            : saveStatus.saving
+              ? t('saving')
+              : saveStatus.lastSavedAt
+                ? `${t('lastSaved')} ${new Date(saveStatus.lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`
+                : t('notSavedYet')}
+        </span>
+        <button
+          className={`text-[9px] px-2 py-0.5 rounded border font-semibold transition-colors ${
+            saveStatus.saving
+              ? 'text-blue-400 border-blue-800/50 cursor-not-allowed'
+              : 'text-slate-500 border-slate-700 hover:text-white hover:border-slate-400 active:bg-slate-700/40'
+          }`}
+          onClick={forceSave}
+          disabled={saveStatus.saving}
+        >
+          {saveStatus.saving ? '…' : t('save')}
+        </button>
       </div>
 
       {/* ── Change serve modal ─────────────────────────────────────────────── */}

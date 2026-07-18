@@ -564,6 +564,7 @@ export function MatchProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError,   setDataError]   = useState(null);
+  const [saveStatus,  setSaveStatus]  = useState({ lastSavedAt: null, error: null, saving: false });
 
   const isHydratingRef    = useRef(false);
   const prevUserRef       = useRef(null);
@@ -636,9 +637,14 @@ export function MatchProvider({ children }) {
     // Active match: debounce writes to avoid excessive Firestore traffic.
     // The closure captures the current match; a safety status check inside the
     // timer prevents a race where the match completes before the 500 ms fires.
-    syncMatchTimerRef.current = setTimeout(() => {
+    syncMatchTimerRef.current = setTimeout(async () => {
       if (state.currentMatch && state.currentMatch.status !== 'completed') {
-        saveCurrentMatchFS(user.uid, state.currentMatch).catch(console.error);
+        try {
+          await saveCurrentMatchFS(user.uid, state.currentMatch);
+          setSaveStatus({ lastSavedAt: Date.now(), error: null, saving: false });
+        } catch (err) {
+          setSaveStatus(s => ({ ...s, error: err.message || 'Save failed', saving: false }));
+        }
       }
     }, 500);
 
@@ -711,10 +717,24 @@ export function MatchProvider({ children }) {
     dispatch(action);
   }, [user, state.currentMatch]);
 
+  const forceSave = useCallback(async () => {
+    const match = state.currentMatch;
+    if (!user || !match || match.status === 'completed') return;
+    setSaveStatus(s => ({ ...s, saving: true, error: null }));
+    try {
+      await saveCurrentMatchFS(user.uid, match);
+      setSaveStatus({ lastSavedAt: Date.now(), error: null, saving: false });
+    } catch (err) {
+      const msg = err.message || 'Save failed';
+      setSaveStatus(s => ({ ...s, saving: false, error: msg }));
+      throw err;
+    }
+  }, [user, state.currentMatch]);
+
   const navigate = useCallback((view) => dispatch({ type: 'SET_VIEW', payload: view }), []);
 
   return (
-    <MatchContext.Provider value={{ state, dispatch: syncDispatch, navigate, dataLoading, dataError, setDataError }}>
+    <MatchContext.Provider value={{ state, dispatch: syncDispatch, navigate, dataLoading, dataError, setDataError, saveStatus, forceSave }}>
       {children}
     </MatchContext.Provider>
   );
