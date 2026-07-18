@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Undo2, Trash2, Check } from 'lucide-react';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -224,7 +225,10 @@ export default function CourtDrawModal() {
     const imageData = canvas.toDataURL('image/png');
     const lastPath = paths[paths.length - 1];
     const endPoint = lastPath?.points[lastPath.points.length - 1] || null;
-    dispatch({ type: 'SAVE_ATTACK_DRAWING', paths, endPoint, imageData });
+    // Generate ID here so syncDispatch can reference the same ID to save imageData
+    // to the drawings sub-collection before the reducer stores the drawing in state.
+    const id = uuidv4();
+    dispatch({ type: 'SAVE_ATTACK_DRAWING', id, paths, endPoint, imageData });
   }
 
   function handleSkip() {

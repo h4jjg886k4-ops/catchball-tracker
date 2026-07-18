@@ -351,14 +351,20 @@ export default function HeatmapModal() {
 
           <div className="flex gap-2 px-3 pb-2 overflow-x-auto flex-shrink-0">
             {activeDrawings.map((d, i) => (
-              <div key={d.id} className="flex-shrink-0">
-                <div className="text-slate-500 text-[10px] text-center mb-0.5">#{i + 1}</div>
-                <img
-                  src={d.imageData}
-                  alt={`Drawing ${i + 1}`}
-                  className="w-16 h-24 object-cover rounded border border-slate-700"
-                />
-                <div className="text-slate-500 text-[10px] text-center mt-0.5">
+              <div key={d.id} className="flex-shrink-0 text-center">
+                <div className="text-slate-500 text-[10px] mb-0.5">#{i + 1}</div>
+                {d.imageData ? (
+                  <img
+                    src={d.imageData}
+                    alt={`Drawing ${i + 1}`}
+                    className="w-16 h-24 object-cover rounded border border-slate-700"
+                  />
+                ) : (
+                  <div className="w-16 h-24 rounded border border-slate-700 bg-slate-800 flex items-center justify-center text-slate-600 text-[10px]">
+                    —
+                  </div>
+                )}
+                <div className="text-slate-500 text-[10px] mt-0.5">
                   {d.score?.home}-{d.score?.opponent}
                 </div>
               </div>

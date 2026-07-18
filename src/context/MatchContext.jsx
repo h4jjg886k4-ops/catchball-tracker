@@ -7,6 +7,7 @@ import {
   saveMatchFS, loadMatchesFS, deleteMatchFS,
   saveTeamFS, loadTeamsFS, deleteTeamFS,
   saveSettingsFS, loadSettingsFS,
+  saveDrawingFS,
 } from '../utils/firestore';
 
 const MatchContext = createContext(null);
@@ -274,7 +275,7 @@ function reducer(state, action) {
       const setIndex = pendingCourtDraw.setIndex;
       const currentSet = match.sets[setIndex];
       const drawing = {
-        id: uuidv4(),
+        id: action.id || uuidv4(), // prefer action.id so syncDispatch can reference same ID
         timestamp: pendingCourtDraw.timestamp,
         score: pendingCourtDraw.score,
         paths: action.paths,
@@ -703,6 +704,16 @@ export function MatchProvider({ children }) {
         clearCurrentMatchFS(user.uid).catch(console.error);
         const partialFinal = { ...state.currentMatch, status: 'completed', endDate: Date.now() };
         saveMatchFS(user.uid, partialFinal).catch(console.error);
+      }
+      // Persist drawing imageData to its own document so the main match doc
+      // stays small.  action.id is generated in CourtDrawModal before dispatch
+      // so both this handler and the reducer reference the same drawing ID.
+      if (action.type === 'SAVE_ATTACK_DRAWING' && state.currentMatch && action.id && action.imageData) {
+        const pendingDraw = state.pendingCourtDraw;
+        if (pendingDraw) {
+          saveDrawingFS(user.uid, state.currentMatch.id, pendingDraw.setIndex, action.id, action.imageData)
+            .catch(console.error);
+        }
       }
       // Save immediately on reopen so state is consistent across refreshes
       if (action.type === 'REOPEN_MATCH') {
