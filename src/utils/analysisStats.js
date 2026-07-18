@@ -227,8 +227,13 @@ Example format: ["Insight 1.", "Insight 2."]`;
 
   if (response.status === 503) throw new Error('NO_KEY');
   if (!response.ok) {
-    const errBody = await response.text().catch(() => '');
-    throw new Error(`API ${response.status}: ${errBody}`);
+    const rawBody = await response.text().catch(() => '');
+    let errMsg = rawBody;
+    try {
+      const parsed = JSON.parse(rawBody);
+      if (parsed.error) errMsg = parsed.error;
+    } catch { /* not JSON — use raw body */ }
+    throw new Error(`HTTP ${response.status}: ${errMsg || '(empty response)'}`);
   }
   const data = await response.json();
   if (!data.content?.[0]?.text) throw new Error('Empty response from API');

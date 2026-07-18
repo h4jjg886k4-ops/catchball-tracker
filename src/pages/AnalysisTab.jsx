@@ -160,9 +160,9 @@ function AIInsightsSection({ insights, loading, error, noKey, onRefresh, t }) {
           </div>
         )}
         {error && !loading && (
-          <div className="space-y-1 py-2">
-            <div className="text-red-400 text-sm text-center">{t('aiInsightsError')}</div>
-            <div className="text-red-600 text-[11px] text-center font-mono break-all px-2">{error}</div>
+          <div className="bg-red-950/50 border border-red-700/60 rounded-xl p-4 space-y-2">
+            <div className="text-red-400 text-sm font-semibold">{t('aiInsightsError')}</div>
+            <pre className="text-red-300 text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed">{error}</pre>
           </div>
         )}
         {insights && insights.map((insight, i) => (
@@ -794,6 +794,7 @@ export default function AnalysisTab({ currentMatch, t }) {
       if (err.message === 'NO_KEY') {
         setAiNoKey(true);
       } else {
+        console.error('[AI Insights] fetch failed:', err.message);
         setAiError(err.message);
       }
     } finally {
