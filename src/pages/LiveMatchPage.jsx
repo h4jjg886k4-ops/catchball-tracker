@@ -84,29 +84,29 @@ export default function LiveMatchPage() {
     const isSelected = selectedPlayerId === player.id;
     return (
       <button
-        className={`flex items-center gap-2 px-2 rounded-xl border transition-all active:scale-[0.97] text-left w-full h-full ${
+        className={`flex flex-col items-center justify-center gap-0.5 px-1.5 rounded-xl border transition-all active:scale-[0.97] w-full h-full ${
           isSelected
             ? 'bg-blue-900 border-blue-500 shadow-lg shadow-blue-900/40'
             : 'bg-slate-800 border-slate-700 hover:border-blue-700'
         }`}
         onClick={() => handlePlayerSelect(player.id)}
       >
-        {/* Jersey */}
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 ${
-          isSelected ? 'bg-blue-700 border-blue-400 text-white' : 'bg-slate-700 border-slate-600 text-white'
-        }`}>
-          {player.number}
-        </div>
-        {/* Name + stats */}
-        <div className="flex-1 min-w-0">
-          <div className="text-white font-bold text-sm leading-tight truncate">{player.name}</div>
-          <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-green-400 text-[10px] font-bold tabular-nums">{stats.cardPoints}נק׳</span>
-            <span className="text-slate-600 text-[9px]">|</span>
-            <span className="text-blue-400 text-[10px] font-bold tabular-nums">{stats.cardAttacks}התק׳</span>
-            <span className="text-slate-600 text-[9px]">|</span>
-            <span className="text-red-400 text-[10px] font-bold tabular-nums">{stats.cardMistakes}שג׳</span>
+        {/* Jersey + name on same row */}
+        <div className="flex items-center gap-1.5">
+          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 ${
+            isSelected ? 'bg-blue-700 border-blue-400 text-white' : 'bg-slate-700 border-slate-600 text-white'
+          }`}>
+            {player.number}
           </div>
+          <span className="text-white font-bold text-sm leading-none truncate max-w-[5.5rem]">{player.name}</span>
+        </div>
+        {/* Stats row */}
+        <div className="flex items-center gap-1">
+          <span className="text-green-400 text-[10px] font-bold tabular-nums">{stats.cardPoints}<span className="text-green-600 text-[8px]">נק׳</span></span>
+          <span className="text-slate-600 text-[8px]">|</span>
+          <span className="text-blue-400 text-[10px] font-bold tabular-nums">{stats.cardAttacks}<span className="text-blue-600 text-[8px]">התק׳</span></span>
+          <span className="text-slate-600 text-[8px]">|</span>
+          <span className="text-red-400 text-[10px] font-bold tabular-nums">{stats.cardMistakes}<span className="text-red-600 text-[8px]">שג׳</span></span>
         </div>
       </button>
     );
@@ -224,82 +224,77 @@ export default function LiveMatchPage() {
       {/* Zone 1: Score header + serve indicator */}
       <ScoreHeader />
 
-      {/* Control bar */}
-      <div className="flex-shrink-0 bg-slate-900/95 border-b border-slate-700/60 flex items-center px-2 py-1.5 gap-1.5">
+      {/* Control bar — always LTR so visual order is predictable */}
+      <div className="flex-shrink-0 bg-slate-900/95 border-b border-slate-700/60 flex items-center px-2 py-1.5 gap-2" dir="ltr">
         {!showEndSetConfirm ? (
           <>
-            {/* Undo — compact, same weight as siblings */}
-            <button
-              disabled={!lastEvent}
-              onClick={() => lastEvent && dispatch({ type: 'UNDO_LAST_EVENT' })}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-medium flex-1 min-w-0 transition-all ${
-                !lastEvent
-                  ? 'bg-slate-800/40 border-slate-700/30 text-slate-600 cursor-not-allowed'
-                  : undoFlash
-                    ? 'bg-amber-900/60 border-amber-700 text-amber-300'
-                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-amber-800 hover:text-amber-400'
-              }`}
-            >
-              <RotateCcw size={11} className="flex-shrink-0" />
-              <span className="flex-shrink-0 text-[11px]">{t('undoAction')}</span>
-              {lastEvent && (
-                <span className={`text-[9px] truncate ml-0.5 ${undoFlash ? 'text-amber-200' : 'text-slate-500'}`}>
-                  {lastEventConf ? `${lastEventConf.emoji} ${lastEventLabel}` : t('manualScore')}
-                </span>
-              )}
-            </button>
+            {/* LEFT: mode toggle */}
+            <div className="flex-shrink-0 flex items-center border border-slate-700 rounded-lg overflow-hidden">
+              <button
+                className={`px-2.5 py-2 text-xs font-bold transition-colors ${
+                  appMode === 'game' ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={() => dispatch({ type: 'SET_APP_MODE', mode: 'game' })}
+              >
+                {t('gameModeShort')}
+              </button>
+              <div className="w-px h-5 bg-slate-700" />
+              <button
+                className={`px-2.5 py-2 text-xs font-bold transition-colors ${
+                  appMode === 'coach' ? 'bg-purple-700 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={() => dispatch({ type: 'SET_APP_MODE', mode: 'coach' })}
+              >
+                {t('coachModeShort')}
+              </button>
+            </div>
 
-            {/* End Set — prominent */}
+            {/* CENTER: End Set — biggest, most prominent */}
             <button
-              className="flex-shrink-0 py-1.5 px-3 rounded-lg bg-orange-700 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs transition-all"
+              className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-black text-sm transition-all shadow-md shadow-orange-900/40"
               onClick={() => setShowEndSetConfirm(true)}
             >
               {t('endSet')} {currentMatch.currentSetIndex + 1}
             </button>
 
-            {/* End Match — prominent with label */}
-            <button
-              className="flex-shrink-0 py-1.5 px-2.5 rounded-lg bg-red-900/80 hover:bg-red-800 active:scale-95 border border-red-700/60 text-red-200 font-bold text-xs transition-all flex items-center gap-1"
-              onClick={() => { if (confirm(t('endMatchConfirm'))) dispatch({ type: 'END_MATCH' }); }}
-            >
-              <StopCircle size={12} />
-            </button>
-
-            {/* Mode toggle with labels */}
-            <div className="flex-shrink-0 flex items-center border border-slate-700 rounded-lg overflow-hidden">
+            {/* RIGHT: Undo (small) + End Match (red text) */}
+            <div className="flex-shrink-0 flex items-center gap-1.5">
               <button
-                className={`px-2 py-1.5 text-[10px] font-bold transition-colors leading-none ${
-                  appMode === 'game' ? 'bg-blue-700 text-white' : 'text-slate-500 hover:text-slate-300'
+                disabled={!lastEvent}
+                onClick={() => lastEvent && dispatch({ type: 'UNDO_LAST_EVENT' })}
+                className={`flex items-center gap-0.5 px-2 py-2 rounded-lg border text-[11px] font-medium transition-all ${
+                  !lastEvent
+                    ? 'border-slate-700/30 text-slate-600 cursor-not-allowed'
+                    : undoFlash
+                      ? 'bg-amber-900/60 border-amber-700 text-amber-300'
+                      : 'border-slate-700 text-slate-400 hover:border-amber-700 hover:text-amber-400'
                 }`}
-                onClick={() => dispatch({ type: 'SET_APP_MODE', mode: 'game' })}
-                title={t('gameMode')}
               >
-                🎮
+                <RotateCcw size={11} className="flex-shrink-0" />
+                <span className="hidden sm:inline">{t('undoAction')}</span>
               </button>
               <button
-                className={`px-2 py-1.5 text-[10px] font-bold transition-colors leading-none ${
-                  appMode === 'coach' ? 'bg-purple-700 text-white' : 'text-slate-500 hover:text-slate-300'
-                }`}
-                onClick={() => dispatch({ type: 'SET_APP_MODE', mode: 'coach' })}
-                title={t('coachMode')}
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-red-900/70 hover:bg-red-800 active:scale-95 border border-red-700/50 text-red-200 font-bold text-xs transition-all"
+                onClick={() => { if (confirm(t('endMatchConfirm'))) dispatch({ type: 'END_MATCH' }); }}
               >
-                📋
+                <StopCircle size={12} />
+                {t('endMatch')}
               </button>
             </div>
           </>
         ) : (
           <>
-            <span className="text-orange-400 text-xs font-semibold flex-1 truncate">
+            <span className="text-orange-400 text-sm font-semibold flex-1">
               {t('endSet')} {currentMatch.currentSetIndex + 1}? ({currentSet.homeScore}–{currentSet.opponentScore})
             </span>
             <button
-              className="flex-shrink-0 py-1.5 px-3 rounded-lg bg-orange-700 hover:bg-orange-600 text-white text-xs font-bold transition-colors"
+              className="flex-shrink-0 py-2 px-4 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-black transition-colors"
               onClick={handleEndSet}
             >
               {t('confirm')}
             </button>
             <button
-              className="flex-shrink-0 py-1.5 px-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs transition-colors"
+              className="flex-shrink-0 py-2 px-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
               onClick={() => setShowEndSetConfirm(false)}
             >
               {t('cancel')}

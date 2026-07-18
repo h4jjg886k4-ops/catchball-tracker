@@ -36,7 +36,9 @@ export const translations = {
   // ── App mode toggle ───────────────────────────────────────────────────────
   back:              { en: 'Back',                  he: 'חזרה' },
   gameMode:          { en: 'Game Mode',             he: 'מצב משחק' },
+  gameModeShort:     { en: 'Game',                  he: 'משחק' },
   coachMode:         { en: 'Coach Mode',            he: 'מצב מאמן' },
+  coachModeShort:    { en: 'Coach',                 he: 'מאמן' },
   gmSuccessAttack:   { en: 'Successful Attack',     he: 'התקפה מוצלחת' },
   gmFailedAttempt:   { en: 'Unsuccessful Attempt',  he: 'ניסיון לא מוצלח' },
   gmMistake:         { en: 'Mistake',               he: 'טעות' },
