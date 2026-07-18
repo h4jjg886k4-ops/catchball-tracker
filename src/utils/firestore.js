@@ -15,7 +15,16 @@ import {
 // ── Current match ─────────────────────────────────────────────────────────────
 export async function saveCurrentMatchFS(uid, match) {
   if (!uid || !match) return;
-  await setDoc(doc(db, 'users', uid, 'currentMatch', 'active'), match);
+  // Hard guard: completed matches must never overwrite the active slot.
+  // Stale debounced saves or multi-session races cannot resurrect an old state.
+  if (match.status === 'completed') {
+    console.warn('[firestore] saveCurrentMatchFS blocked — match is completed, use saveMatchFS instead');
+    return;
+  }
+  await setDoc(doc(db, 'users', uid, 'currentMatch', 'active'), {
+    ...match,
+    _savedAt: Date.now(),
+  });
 }
 
 export async function loadCurrentMatchFS(uid) {

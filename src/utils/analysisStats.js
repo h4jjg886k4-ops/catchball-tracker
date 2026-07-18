@@ -12,13 +12,20 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const cont2nd       = ev.filter(e => e.type === T.ATTACK_CONT_2ND).length;
   const cont3rd       = ev.filter(e => e.type === T.ATTACK_CONT_3RD).length;
   const attackOut     = ev.filter(e => e.type === T.ATTACK_OUT).length;
-  const attackBlocked = ev.filter(e => e.type === T.ATTACK_BLOCKED).length;
+
+  // Blocked attacks: split by ballNumber if available; events without ballNumber default to 3rd
+  const blockedEvents   = ev.filter(e => e.type === T.ATTACK_BLOCKED);
+  const attackBlocked   = blockedEvents.length;
+  const blocked2nd      = blockedEvents.filter(e => e.ballNumber === 2).length;
+  const blocked3rd      = blockedEvents.filter(e => e.ballNumber === 3).length;
+  const blockedUnknown  = blockedEvents.filter(e => !e.ballNumber).length; // legacy, treat as 3rd
   const totalAttackErrors = attackOut + attackBlocked;
 
-  const attempts2nd = wins2nd + cont2nd;
-  const attempts3rd = wins3rd + cont3rd;
+  // Ball-number–aware attempt counts include corresponding blocked attacks
+  const attempts2nd = wins2nd + cont2nd + blocked2nd;
+  const attempts3rd = wins3rd + cont3rd + blocked3rd + blockedUnknown;
   const totalAttackWins = wins2nd + wins3rd;
-  const totalAttackAttempts = attempts2nd + attempts3rd + totalAttackErrors;
+  const totalAttackAttempts = attempts2nd + attempts3rd + attackOut;
 
   const aces         = ev.filter(e => e.type === T.ACE).length;
   const blocks       = ev.filter(e => e.type === T.BLOCK).length;
@@ -36,7 +43,7 @@ export function calcAdvancedPlayerStats(playerId, events) {
     playerId,
     wins2nd, wins3rd, totalAttackWins,
     cont2nd, cont3rd,
-    attackOut, attackBlocked, totalAttackErrors,
+    attackOut, attackBlocked, blocked2nd, blocked3rd, totalAttackErrors,
     attempts2nd, attempts3rd, totalAttackAttempts,
     pct2nd: attempts2nd > 0 ? Math.round(wins2nd / attempts2nd * 100) : null,
     pct3rd: attempts3rd > 0 ? Math.round(wins3rd / attempts3rd * 100) : null,
@@ -145,21 +152,18 @@ export function calcErrorByGameState(playerId, allEvents) {
   return { playerId, leading, tied, trailing, total: leading + tied + trailing };
 }
 
-export function buildScoreTimeline(sets) {
-  const points = [];
-  for (const [setIdx, set] of sets.entries()) {
+// Returns [{setNum, data: [{rally, home, opponent}]}] — one entry per set.
+// setIndexOffset shifts set numbers so a single-element filtered array shows the right label.
+export function buildScoreTimeline(sets, setIndexOffset = 0) {
+  return sets.map((set, idx) => {
+    const points = [];
     for (const ev of (set.events || [])) {
       if (HOME_SCORE_EVENTS.has(ev.type) || OPPONENT_SCORE_EVENTS.has(ev.type)) {
-        points.push({
-          rally: points.length + 1,
-          home: ev.homeScore,
-          opponent: ev.opponentScore,
-          set: setIdx + 1,
-        });
+        points.push({ rally: points.length + 1, home: ev.homeScore, opponent: ev.opponentScore });
       }
     }
-  }
-  return points;
+    return { setNum: setIndexOffset + idx + 1, data: points };
+  }).filter(s => s.data.length > 0);
 }
 
 export function calcEventDistribution(allEvents) {
@@ -215,17 +219,21 @@ Example format: ["Insight 1.", "Insight 2."]`;
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     }),
   });
 
   if (response.status === 503) throw new Error('NO_KEY');
-  if (!response.ok) throw new Error(`API error: ${response.status}`);
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    throw new Error(`API ${response.status}: ${errBody}`);
+  }
   const data = await response.json();
+  if (!data.content?.[0]?.text) throw new Error('Empty response from API');
   const text = data.content[0].text;
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) throw new Error('Invalid response format');
-  return JSON.parse(match[0]);
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error(`Unexpected format: ${text.slice(0, 120)}`);
+  return JSON.parse(jsonMatch[0]);
 }

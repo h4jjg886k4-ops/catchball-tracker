@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { X, RotateCcw } from 'lucide-react';
 import { EVENT_TYPES as T, EVENT_CONFIG } from '../../utils/constants';
@@ -100,6 +100,8 @@ export default function EventButtons() {
   const { t } = useLanguage();
   const { selectedPlayerId, currentMatch } = state;
 
+  const [pendingBlocked, setPendingBlocked] = useState(false);
+
   if (!selectedPlayerId || !currentMatch) return null;
 
   const player = currentMatch.homeTeam.players.find(p => p.id === selectedPlayerId);
@@ -112,18 +114,27 @@ export default function EventButtons() {
     ? t(EVENT_TYPE_I18N_KEY[lastEvtCfg.type])
     : lastEvtCfg?.label;
 
-  function record(type) {
+  function record(type, extra = {}) {
     dispatch({
       type: 'RECORD_EVENT',
-      event: { id: uuidv4(), type, playerId: selectedPlayerId, timestamp: Date.now() },
+      event: { id: uuidv4(), type, playerId: selectedPlayerId, timestamp: Date.now(), ...extra },
     });
+    setPendingBlocked(false);
+  }
+
+  function handleActionPress(type) {
+    if (type === T.ATTACK_BLOCKED) {
+      setPendingBlocked(true);
+    } else {
+      record(type);
+    }
   }
 
   function buildGrid(types, cols) {
     const configs = types.map(tp => EVENT_CONFIG.find(c => c.type === tp)).filter(Boolean);
     return (
       <div className="grid gap-2 mb-1" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-        {configs.map(cfg => <ActionBtn key={cfg.type} cfg={cfg} onPress={record} />)}
+        {configs.map(cfg => <ActionBtn key={cfg.type} cfg={cfg} onPress={handleActionPress} />)}
       </div>
     );
   }
@@ -205,11 +216,43 @@ export default function EventButtons() {
             ) : (
               buildGrid(section.types, section.cols)
             )}
+
           </div>
         ))}
 
         <div className="h-4" />
       </div>
+
+      {/* ── Blocked-attack ball-number picker ─────────────────────────── */}
+      {pendingBlocked && (
+        <div
+          className="absolute inset-0 z-40 bg-black/70 flex items-end justify-center"
+          onClick={() => setPendingBlocked(false)}
+        >
+          <div
+            className="bg-slate-800 rounded-t-2xl w-full border-t border-slate-600 px-4 pt-4 pb-8 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-slate-200 font-bold text-center text-base mb-4">{t('chooseBallNumber')}</div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                className="btn-3d btn-3d-blue py-5 text-base font-black flex flex-col items-center gap-1"
+                onClick={() => record(T.ATTACK_BLOCKED, { ballNumber: 2 })}
+              >
+                <span className="text-2xl">2️⃣</span>
+                <span>{t('secondBall')}</span>
+              </button>
+              <button
+                className="btn-3d btn-3d-blue py-5 text-base font-black flex flex-col items-center gap-1"
+                onClick={() => record(T.ATTACK_BLOCKED, { ballNumber: 3 })}
+              >
+                <span className="text-2xl">3️⃣</span>
+                <span>{t('thirdBall')}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

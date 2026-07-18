@@ -603,8 +603,12 @@ export function MatchProvider({ children }) {
       if (currentMatch?.status === 'completed') {
         dispatch({ type: 'SET_VIEW', payload: VIEWS.STATS });
       }
-      isHydratingRef.current = false;
+      // Set dataLoading=false BEFORE clearing isHydrating so the sync effects
+      // see isHydrating=true during the render triggered by setDataLoading and
+      // skip their write — preventing the just-loaded state from being saved
+      // straight back to Firestore (and racing with any in-flight writes).
       setDataLoading(false);
+      setTimeout(() => { isHydratingRef.current = false; }, 0);
     }).catch(err => {
       console.error('Firestore load error:', err);
       setDataError(err.message);
@@ -613,15 +617,31 @@ export function MatchProvider({ children }) {
     });
   }, [user]);
 
-  // ── Sync currentMatch (debounced 500ms) ────────────────────────────────────
+  // ── Sync currentMatch ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!user || dataLoading || isHydratingRef.current) return;
+    const match = state.currentMatch;
+    if (!match) return;
+
     clearTimeout(syncMatchTimerRef.current);
+
+    if (match.status === 'completed') {
+      // Completed match: persist to history and evict the active slot immediately.
+      // This runs synchronously after END_MATCH renders, so post-reducer state is correct.
+      saveMatchFS(user.uid, match).catch(console.error);
+      clearCurrentMatchFS(user.uid).catch(console.error);
+      return;
+    }
+
+    // Active match: debounce writes to avoid excessive Firestore traffic.
+    // The closure captures the current match; a safety status check inside the
+    // timer prevents a race where the match completes before the 500 ms fires.
     syncMatchTimerRef.current = setTimeout(() => {
-      if (state.currentMatch) {
+      if (state.currentMatch && state.currentMatch.status !== 'completed') {
         saveCurrentMatchFS(user.uid, state.currentMatch).catch(console.error);
       }
     }, 500);
+
     return () => clearTimeout(syncMatchTimerRef.current);
   }, [state.currentMatch, user, dataLoading]);
 
@@ -669,11 +689,14 @@ export function MatchProvider({ children }) {
       if (action.type === 'DELETE_TEAM_FROM_STATE') {
         deleteTeamFS(user.uid, action.teamId).catch(console.error);
       }
-      // Save immediately on end match so a page refresh doesn't lose the final state
+      // On END_MATCH: immediately evict the active slot so no stale write can
+      // resurrect old state.  Also write a preliminary history entry so the
+      // match survives a crash in the ~16 ms before the post-render effect fires
+      // with the fully-correct post-reducer state (which will overwrite this).
       if (action.type === 'END_MATCH' && state.currentMatch) {
-        const finalMatch = { ...state.currentMatch, status: 'completed', endDate: Date.now() };
-        saveCurrentMatchFS(user.uid, finalMatch).catch(console.error);
-        saveMatchFS(user.uid, finalMatch).catch(console.error);
+        clearCurrentMatchFS(user.uid).catch(console.error);
+        const partialFinal = { ...state.currentMatch, status: 'completed', endDate: Date.now() };
+        saveMatchFS(user.uid, partialFinal).catch(console.error);
       }
       // Save immediately on reopen so state is consistent across refreshes
       if (action.type === 'REOPEN_MATCH') {

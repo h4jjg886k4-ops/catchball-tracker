@@ -159,6 +159,8 @@ export const translations = {
   secondBall:  { en: '2nd ball', he: 'כדור 2' },
   thirdBall:   { en: '3rd ball', he: 'כדור 3' },
   attackErr:   { en: 'Error',    he: 'שגיאה' },
+  chooseBallNumber: { en: 'Which ball?', he: 'איזה כדור?' },
+  allSets:     { en: 'All Sets', he: 'כל הסטים' },
 
   // ── Event type labels (used in buttons, log, undo bar) ────────────────────
   ace:           { en: 'Ace',                  he: 'אס' },

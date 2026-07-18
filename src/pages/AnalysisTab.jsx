@@ -160,7 +160,10 @@ function AIInsightsSection({ insights, loading, error, noKey, onRefresh, t }) {
           </div>
         )}
         {error && !loading && (
-          <div className="text-red-400 text-sm text-center py-2">{t('aiInsightsError')}</div>
+          <div className="space-y-1 py-2">
+            <div className="text-red-400 text-sm text-center">{t('aiInsightsError')}</div>
+            <div className="text-red-600 text-[11px] text-center font-mono break-all px-2">{error}</div>
+          </div>
         )}
         {insights && insights.map((insight, i) => (
           <div
@@ -299,26 +302,38 @@ function AttackDistributionChart({ playerAdvancedList, t }) {
 }
 
 // ── Score Timeline ────────────────────────────────────────────────────────────
-function ScoreTimelineChart({ sets, homeTeamName, opponentName, t }) {
-  const data = useMemo(() => buildScoreTimeline(sets), [sets]);
-  if (!data.length) return null;
+function ScoreTimelineChart({ sets, setIndexOffset = 0, homeTeamName, opponentName, t }) {
+  const perSetData = useMemo(() => buildScoreTimeline(sets, setIndexOffset), [sets, setIndexOffset]);
+  if (!perSetData.length) return null;
 
   return (
     <Card>
       <SectionHeader title={t('scoreTimeline')} />
-      <div className="p-3">
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={data} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="rally" tick={{ fill: '#94a3b8', fontSize: 10 }} label={{ value: t('rallyLabel'), position: 'insideBottom', offset: -2, fill: '#64748b', fontSize: 10 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={v => `${t('rallyLabel')} ${v}`} />
-            <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
-            <Line type="monotone" dataKey="home" stroke="#3b82f6" dot={false} strokeWidth={2} name={homeTeamName} />
-            <Line type="monotone" dataKey="opponent" stroke="#ef4444" dot={false} strokeWidth={2} name={opponentName} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+      {perSetData.map(({ setNum, data }) => (
+        <div key={setNum}>
+          {perSetData.length > 1 && (
+            <div className="px-4 pt-3 pb-0 text-slate-400 text-xs font-bold uppercase tracking-wider">
+              {t('setLabel')} {setNum}
+            </div>
+          )}
+          <div className="p-3">
+            <ResponsiveContainer width="100%" height={170}>
+              <LineChart data={data} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="rally" tick={{ fill: '#94a3b8', fontSize: 10 }} label={{ value: t('rallyLabel'), position: 'insideBottom', offset: -2, fill: '#64748b', fontSize: 10 }} />
+                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={v => `${t('rallyLabel')} ${v}`} />
+                <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                <Line type="monotone" dataKey="home" stroke="#3b82f6" dot={false} strokeWidth={2} name={homeTeamName} />
+                <Line type="monotone" dataKey="opponent" stroke="#ef4444" dot={false} strokeWidth={2} name={opponentName} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {perSetData.length > 1 && setNum < perSetData[perSetData.length - 1].setNum && (
+            <div className="border-t border-slate-700/50 mx-4" />
+          )}
+        </div>
+      ))}
     </Card>
   );
 }
@@ -708,13 +723,25 @@ function EventLogSection({ currentMatch, players, t }) {
 
 // ── Main AnalysisTab component ────────────────────────────────────────────────
 export default function AnalysisTab({ currentMatch, t }) {
-  const players   = currentMatch.homeTeam.players;
-  const allEvents = useMemo(() => currentMatch.sets.flatMap(s => s.events || []), [currentMatch]);
+  const players = currentMatch.homeTeam.players;
 
-  // Compute all stats
+  // ── Set filter ──────────────────────────────────────────────────────────────
+  const [selectedSetIdx, setSelectedSetIdx] = useState(null); // null = all sets
+
+  const filteredSets = useMemo(() =>
+    selectedSetIdx === null ? currentMatch.sets : [currentMatch.sets[selectedSetIdx]].filter(Boolean),
+    [currentMatch.sets, selectedSetIdx]
+  );
+
+  const filteredEvents = useMemo(
+    () => filteredSets.flatMap(s => s.events || []),
+    [filteredSets]
+  );
+
+  // ── All computed stats use filteredEvents ───────────────────────────────────
   const playerAdvancedList = useMemo(() =>
-    players.map(p => ({ player: p, stats: calcAdvancedPlayerStats(p.id, allEvents) })),
-    [players, allEvents]
+    players.map(p => ({ player: p, stats: calcAdvancedPlayerStats(p.id, filteredEvents) })),
+    [players, filteredEvents]
   );
 
   const playerAdvancedMap = useMemo(() => {
@@ -723,65 +750,91 @@ export default function AnalysisTab({ currentMatch, t }) {
     return m;
   }, [playerAdvancedList]);
 
-  const teamStats  = useMemo(() => calcAdvancedTeamStats(players, allEvents), [players, allEvents]);
-  const momentum   = useMemo(() => calcMomentum(allEvents), [allEvents]);
+  const teamStats     = useMemo(() => calcAdvancedTeamStats(players, filteredEvents), [players, filteredEvents]);
+  const momentum      = useMemo(() => calcMomentum(filteredEvents), [filteredEvents]);
 
   const clutchMap = useMemo(() => {
     const m = {};
-    players.forEach(p => { m[p.id] = calcClutchStats(p.id, allEvents); });
+    players.forEach(p => { m[p.id] = calcClutchStats(p.id, filteredEvents); });
     return m;
-  }, [players, allEvents]);
+  }, [players, filteredEvents]);
 
   const errorStateMap = useMemo(() => {
     const m = {};
-    players.forEach(p => { m[p.id] = calcErrorByGameState(p.id, allEvents); });
+    players.forEach(p => { m[p.id] = calcErrorByGameState(p.id, filteredEvents); });
     return m;
-  }, [players, allEvents]);
+  }, [players, filteredEvents]);
 
-  // AI insights
-  const [insights, setInsights]  = useState(null);
+  // ── AI insights ─────────────────────────────────────────────────────────────
+  const [insights, setInsights]   = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError]    = useState(false);
-  const [aiNoKey, setAiNoKey]    = useState(false);
+  const [aiError, setAiError]     = useState(null);   // null or error string
+  const [aiNoKey, setAiNoKey]     = useState(false);
 
   const loadInsights = useCallback(async () => {
     setAiLoading(true);
-    setAiError(false);
+    setAiError(null);
     setAiNoKey(false);
+    setInsights(null);
     try {
       const result = await fetchAIInsights({
-        homeTeam:    currentMatch.homeTeam.name,
+        homeTeam:     currentMatch.homeTeam.name,
         opponentTeam: currentMatch.opponentTeam.name,
-        team:        teamStats,
+        setLabel:     selectedSetIdx !== null ? `Set ${selectedSetIdx + 1}` : 'All Sets',
+        team:         teamStats,
         playersSummary: playerAdvancedList.map(({ player, stats }) => ({
           name: player.name, number: player.number, ...stats,
         })),
         momentum,
-        clutchStats: players.map(p => ({
-          name: p.name, ...clutchMap[p.id],
-        })),
-        errorStats: players.map(p => ({
-          name: p.name, ...errorStateMap[p.id],
-        })),
+        clutchStats: players.map(p => ({ name: p.name, ...clutchMap[p.id] })),
+        errorStats:  players.map(p => ({ name: p.name, ...errorStateMap[p.id] })),
       });
       setInsights(result);
     } catch (err) {
       if (err.message === 'NO_KEY') {
         setAiNoKey(true);
       } else {
-        setAiError(true);
+        setAiError(err.message);
       }
     } finally {
       setAiLoading(false);
     }
-  }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, players]);
+  }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, players, selectedSetIdx]);
 
+  // Auto-load on mount and whenever the filter changes
   useEffect(() => {
     loadInsights();
-  }, []);   // intentionally run only on mount
+  }, [loadInsights]);
+
+  const multiSet = currentMatch.sets.length > 1;
 
   return (
     <div className="space-y-4">
+
+      {/* 0. Set filter pills */}
+      {multiSet && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          <button
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+              selectedSetIdx === null ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+            onClick={() => setSelectedSetIdx(null)}
+          >
+            {t('allSets')}
+          </button>
+          {currentMatch.sets.map((_, i) => (
+            <button
+              key={i}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+                selectedSetIdx === i ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+              onClick={() => setSelectedSetIdx(i)}
+            >
+              {t('setLabel')} {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 1. Summary Cards */}
       <SummaryCards
@@ -812,9 +865,10 @@ export default function AnalysisTab({ currentMatch, t }) {
       {/* 5. Attack Distribution */}
       <AttackDistributionChart playerAdvancedList={playerAdvancedList} t={t} />
 
-      {/* 6. Score Timeline */}
+      {/* 6. Score Timeline — per-set charts */}
       <ScoreTimelineChart
-        sets={currentMatch.sets}
+        sets={filteredSets}
+        setIndexOffset={selectedSetIdx ?? 0}
         homeTeamName={currentMatch.homeTeam.name}
         opponentName={currentMatch.opponentTeam.name}
         t={t}
@@ -842,7 +896,7 @@ export default function AnalysisTab({ currentMatch, t }) {
       <TeamStatistics teamStats={teamStats} t={t} />
 
       {/* 11. Event Distribution */}
-      <EventDistributionChart allEvents={allEvents} t={t} />
+      <EventDistributionChart allEvents={filteredEvents} t={t} />
 
       {/* 12. Detailed Player Stats */}
       <DetailedPlayerStats playerAdvancedList={playerAdvancedList} players={players} t={t} />
