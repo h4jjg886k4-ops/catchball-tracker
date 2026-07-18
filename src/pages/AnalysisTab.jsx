@@ -742,12 +742,12 @@ export default function AnalysisTab({ currentMatch, t }) {
   const [insights, setInsights]  = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError]    = useState(false);
-  const hasApiKey = !!import.meta.env.VITE_ANTHROPIC_API_KEY;
+  const [aiNoKey, setAiNoKey]    = useState(false);
 
   const loadInsights = useCallback(async () => {
-    if (!hasApiKey) return;
     setAiLoading(true);
     setAiError(false);
+    setAiNoKey(false);
     try {
       const result = await fetchAIInsights({
         homeTeam:    currentMatch.homeTeam.name,
@@ -765,12 +765,16 @@ export default function AnalysisTab({ currentMatch, t }) {
         })),
       });
       setInsights(result);
-    } catch {
-      setAiError(true);
+    } catch (err) {
+      if (err.message === 'NO_KEY') {
+        setAiNoKey(true);
+      } else {
+        setAiError(true);
+      }
     } finally {
       setAiLoading(false);
     }
-  }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, hasApiKey, players]);
+  }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, players]);
 
   useEffect(() => {
     loadInsights();
@@ -794,7 +798,7 @@ export default function AnalysisTab({ currentMatch, t }) {
         insights={insights}
         loading={aiLoading}
         error={aiError}
-        noKey={!hasApiKey}
+        noKey={aiNoKey}
         onRefresh={loadInsights}
         t={t}
       />

@@ -188,9 +188,6 @@ export function calcEventDistribution(allEvents) {
 }
 
 export async function fetchAIInsights(analysisData) {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-
   const { homeTeam, opponentTeam, team, playersSummary, momentum, clutchStats, errorStats } = analysisData;
 
   const scoreStr = s => s ? `${s.home}-${s.opp}` : 'N/A';
@@ -214,14 +211,9 @@ ${errorStats.map(e => `${e.name}: ${e.leading}/${e.tied}/${e.trailing} total=${e
 Return ONLY a JSON array of 3-8 insight strings. Every insight must reference specific numbers and player names from this data. Be concrete and actionable for the coach.
 Example format: ["Insight 1.", "Insight 2."]`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('/api/insights', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-allow-browser': 'true',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
@@ -229,6 +221,7 @@ Example format: ["Insight 1.", "Insight 2."]`;
     }),
   });
 
+  if (response.status === 503) throw new Error('NO_KEY');
   if (!response.ok) throw new Error(`API error: ${response.status}`);
   const data = await response.json();
   const text = data.content[0].text;

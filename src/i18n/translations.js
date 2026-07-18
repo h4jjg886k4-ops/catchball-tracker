@@ -270,7 +270,7 @@ export const translations = {
   eventDistribution:    { en: 'Event Distribution',   he: 'פילוג אירועים' },
   generatingInsights:   { en: 'Generating AI insights…', he: 'מייצר תובנות AI…' },
   aiInsightsError:      { en: 'Failed to generate insights.', he: 'שגיאה בייצור תובנות.' },
-  aiNoKey:              { en: 'Set VITE_ANTHROPIC_API_KEY to enable AI insights', he: 'הגדר VITE_ANTHROPIC_API_KEY להפעלת תובנות AI' },
+  aiNoKey:              { en: 'Set ANTHROPIC_API_KEY in Vercel environment variables to enable AI insights', he: 'הגדר ANTHROPIC_API_KEY במשתני הסביבה של Vercel להפעלת תובנות AI' },
   clutchPts:            { en: 'Clutch Pts',           he: "נק' לחץ" },
   clutchErr:            { en: 'Clutch Err',           he: "שג' לחץ" },
   clutchPct:            { en: 'Clutch %',             he: '% לחץ' },

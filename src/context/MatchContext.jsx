@@ -490,6 +490,10 @@ export function MatchProvider({ children }) {
       prevMatchesRef.current = matches;
       prevTeamsRef.current   = savedTeams;
       dispatch({ type: 'HYDRATE', currentMatch, matches, savedTeams, settings });
+      // If the last session ended a match, restore the user directly to the stats screen
+      if (currentMatch?.status === 'completed') {
+        dispatch({ type: 'SET_VIEW', payload: VIEWS.STATS });
+      }
       isHydratingRef.current = false;
       setDataLoading(false);
     }).catch(err => {
@@ -544,7 +548,7 @@ export function MatchProvider({ children }) {
     }
   }, [state.appMode, user, dataLoading]);
 
-  // ── Dispatch wrapper handles Firestore deletes ────────────────────────────
+  // ── Dispatch wrapper handles Firestore deletes + immediate END_MATCH save ──
   const syncDispatch = useCallback((action) => {
     if (user) {
       if (action.type === 'DELETE_MATCH') {
@@ -555,6 +559,12 @@ export function MatchProvider({ children }) {
       }
       if (action.type === 'DELETE_TEAM_FROM_STATE') {
         deleteTeamFS(user.uid, action.teamId).catch(console.error);
+      }
+      // Save immediately on end match so a page refresh doesn't lose the final state
+      if (action.type === 'END_MATCH' && state.currentMatch) {
+        const finalMatch = { ...state.currentMatch, status: 'completed', endDate: Date.now() };
+        saveCurrentMatchFS(user.uid, finalMatch).catch(console.error);
+        saveMatchFS(user.uid, finalMatch).catch(console.error);
       }
     }
     dispatch(action);
