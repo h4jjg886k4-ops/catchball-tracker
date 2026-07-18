@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, BarChart2, AlignLeft, Layers, StopCircle, UserPlus, X } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS, POSITION_ABBR, EVENT_CONFIG } from '../utils/constants';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { calcPlayerStats } from '../utils/stats';
 import ScoreHeader from '../components/ui/ScoreHeader';
-import RotationView from '../components/ui/RotationView';
 import EventButtons from '../components/ui/EventButtons';
 import GameModeButtons from '../components/ui/GameModeButtons';
 import SubstitutionModal from '../components/modals/SubstitutionModal';
@@ -15,6 +13,12 @@ import CourtDrawModal from '../components/modals/CourtDrawModal';
 import HeatmapModal from '../components/modals/HeatmapModal';
 import RotationSetupModal from '../components/modals/RotationSetupModal';
 import ServeSetupModal from '../components/modals/ServeSetupModal';
+
+// Court layout: [position, row, col] — always LTR, positions are physical
+const COURT_LAYOUT = [
+  [4, 0, 0], [3, 0, 1], [2, 0, 2],
+  [5, 1, 0], [6, 1, 1], [1, 1, 2],
+];
 
 export default function LiveMatchPage() {
   const { state, dispatch, navigate } = useMatch();
@@ -24,17 +28,10 @@ export default function LiveMatchPage() {
     showSubstitution, showCourtDraw, showHeatmap, needsRotationSetup, needsServeSetup,
   } = state;
   const [showRotationSetup, setShowRotationSetup] = useState(false);
-  const [activeTab, setActiveTab] = useState('players');
   const [showEndSetConfirm, setShowEndSetConfirm] = useState(false);
-  const [showAddPlayer, setShowAddPlayer] = useState(false);
-  const [newName,   setNewName]   = useState('');
-  const [newNumber, setNewNumber] = useState('');
-  const [addError,  setAddError]  = useState('');
   const appMode = state.appMode;
 
-  function switchMode(mode) {
-    dispatch({ type: 'SET_APP_MODE', mode });
-  }
+  function switchMode(mode) { dispatch({ type: 'SET_APP_MODE', mode }); }
 
   if (!currentMatch) {
     return (
@@ -50,74 +47,45 @@ export default function LiveMatchPage() {
   }
 
   const currentSet = currentMatch.sets[currentMatch.currentSetIndex];
-  const players = currentMatch.homeTeam.players;
-  const allEvents = currentSet.events || [];
+  const players    = currentMatch.homeTeam.players;
+  const allEvents  = currentSet.events || [];
 
-  function handlePlayerSelect(playerId) {
-    dispatch({ type: 'SELECT_PLAYER', playerId });
-  }
-
-  function handleEndSet() {
-    dispatch({ type: 'END_SET' });
-    setShowEndSetConfirm(false);
-  }
-
-  function handleRotationSetupClose() {
-    setShowRotationSetup(false);
-    if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
-  }
-
-  function openAddPlayer() {
-    setNewName('');
-    setNewNumber(String(players.length + 1));
-    setAddError('');
-    setShowAddPlayer(true);
-  }
-
-  function handleAddPlayer() {
-    if (!newNumber.trim()) { setAddError(t('errJerseyRequired')); return; }
-    dispatch({
-      type: 'ADD_PLAYER_TO_MATCH',
-      player: { id: uuidv4(), name: newName.trim(), number: newNumber.trim(), position: '' },
-    });
-    setShowAddPlayer(false);
-  }
-
-  // ── bench computation ──────────────────────────────────────────────────────
-  const subbedOutIds = new Set(currentSet.substitutions.map(s => s.outPlayerId));
+  // Derive the 6 players currently on court (accounts for substitutions)
   const currentOnCourt = new Set(currentSet.rotation.filter(id => id !== ''));
   for (const sub of currentSet.substitutions) {
     currentOnCourt.delete(sub.outPlayerId);
     currentOnCourt.add(sub.inPlayerId);
   }
-  const isBenched = id => subbedOutIds.has(id) && !currentOnCourt.has(id);
-  const activePlayers = players.filter(p => !isBenched(p.id));
-  const benchPlayers  = players.filter(p =>  isBenched(p.id));
+  const courtPlayers = players.filter(p => currentOnCourt.has(p.id));
 
-  // ── player cell (2×3 grid) ─────────────────────────────────────────────────
+  function handlePlayerSelect(playerId) { dispatch({ type: 'SELECT_PLAYER', playerId }); }
+  function handleEndSet() { dispatch({ type: 'END_SET' }); setShowEndSetConfirm(false); }
+  function handleRotationSetupClose() {
+    setShowRotationSetup(false);
+    if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
+  }
+
+  // ── Player button (Zone 2) ─────────────────────────────────────────────────
   function PlayerCell({ player }) {
     const stats = calcPlayerStats(player.id, allEvents);
     const isSelected = selectedPlayerId === player.id;
     return (
       <button
-        className={`flex items-center gap-2 px-2.5 py-2 rounded-xl border transition-all active:scale-[0.97] text-left w-full ${
+        className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all active:scale-[0.97] text-left w-full h-full ${
           isSelected
             ? 'bg-blue-900 border-blue-500 shadow-md shadow-blue-900/40'
             : 'bg-slate-800 border-slate-700 hover:border-blue-700'
         }`}
         onClick={() => handlePlayerSelect(player.id)}
       >
-        {/* Jersey */}
-        <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-base font-black flex-shrink-0 leading-none ${
+        <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-base font-black flex-shrink-0 leading-none ${
           isSelected ? 'bg-blue-700 border-blue-400 text-white' : 'bg-slate-700 border-slate-600 text-white'
         }`}>
           {player.number}
         </div>
-
-        {/* Name + stats */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className="text-white font-black text-lg leading-none truncate">{player.name}</span>
+            <span className="text-white font-black text-base leading-none truncate">{player.name}</span>
             <span className="flex items-baseline gap-0.5 flex-shrink-0 text-[10px] leading-none">
               <span className="text-green-400 font-bold tabular-nums">{stats.cardPoints}</span>
               <span className="text-slate-600">·</span>
@@ -136,47 +104,106 @@ export default function LiveMatchPage() {
     );
   }
 
-  // ── bench chip (single compact line) ──────────────────────────────────────
-  function BenchChip({ player }) {
+  // ── Mini court panel (Zone 3) ──────────────────────────────────────────────
+  function MiniCourtPanel() {
+    const rotation = currentSet.rotation;
+    const rotIdx   = currentMatch.currentRotationIndex;
+    const canUndoRotation = (currentMatch.rotationHistory || []).length > 0;
+
+    function getPlayerAtPos(pos) {
+      const id = rotation[pos - 1];
+      return players.find(p => p.id === id) ?? null;
+    }
+
     return (
-      <button
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700/60 bg-slate-800/50 text-slate-400 hover:border-blue-800 transition-colors active:scale-95"
-        onClick={() => handlePlayerSelect(player.id)}
-      >
-        <span className="text-[11px] font-black text-slate-500">#{player.number}</span>
-        <span className="text-[11px] font-semibold truncate max-w-[90px]">{player.name}</span>
-      </button>
+      <div className="bg-slate-800/80 border-t border-slate-700 flex-shrink-0" dir="ltr">
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+            {t('rotationLabel')} {rotIdx + 1}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              className={`flex items-center gap-0.5 text-[10px] px-2 py-1 rounded-lg transition-colors font-medium ${
+                canUndoRotation
+                  ? 'bg-amber-900/70 border border-amber-700 text-amber-300 active:scale-95'
+                  : 'bg-slate-700/40 border border-slate-700 text-slate-600 cursor-not-allowed'
+              }`}
+              onClick={() => canUndoRotation && dispatch({ type: 'UNDO_ROTATION' })}
+              disabled={!canUndoRotation}
+            >
+              <RotateCcw size={10} /> {t('undoRotation')}
+            </button>
+            <button
+              className="flex items-center gap-0.5 text-[10px] bg-slate-700 hover:bg-blue-800 active:scale-95 px-2 py-1 rounded-lg transition-colors font-medium border border-slate-600 text-slate-200"
+              onClick={() => dispatch({ type: 'MANUAL_ROTATE' })}
+            >
+              <RotateCw size={10} /> {t('rotateBtn')}
+            </button>
+            <button
+              className="flex items-center gap-0.5 text-[10px] bg-slate-700/50 hover:bg-slate-600 px-2 py-1 rounded-lg transition-colors font-medium border border-slate-600/50 text-slate-400"
+              onClick={() => setShowRotationSetup(true)}
+            >
+              {t('setStartingRotation')}
+            </button>
+          </div>
+        </div>
+
+        {/* Court grid */}
+        <div className="px-2 pb-2">
+          {/* Net */}
+          <div className="flex items-center gap-1.5 mb-1">
+            <div className="flex-1 h-px bg-yellow-500/40" />
+            <span className="text-[8px] font-bold text-yellow-500/60 uppercase tracking-widest">{t('netLabel')}</span>
+            <div className="flex-1 h-px bg-yellow-500/40" />
+          </div>
+
+          {/* 2×3 position grid */}
+          <div className="grid grid-rows-2 grid-cols-3 gap-1">
+            {COURT_LAYOUT.map(([pos]) => {
+              const player   = getPlayerAtPos(pos);
+              const isServer = pos === 1;
+              return (
+                <div
+                  key={pos}
+                  className={`rounded-lg text-center py-1.5 px-1 border ${
+                    isServer
+                      ? 'bg-green-900/50 border-green-600/60'
+                      : 'bg-slate-700/40 border-slate-600/50'
+                  }`}
+                >
+                  <div className={`text-[8px] font-bold leading-none ${isServer ? 'text-green-400' : 'text-slate-500'}`}>
+                    P{pos}{isServer ? ' 🏐' : ''}
+                  </div>
+                  {player ? (
+                    <>
+                      <div className={`font-black text-sm leading-none mt-0.5 tabular-nums ${isServer ? 'text-green-300' : 'text-white'}`}>
+                        {player.number}
+                      </div>
+                      <div className={`text-[9px] truncate leading-tight mt-0.5 ${isServer ? 'text-green-400/80' : 'text-slate-400'}`}>
+                        {player.name.split(' ')[0]}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-slate-600 text-xs mt-0.5">—</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     );
   }
 
-  const tabs = [
-    { id: 'players',  labelKey: 'playersTab',  icon: AlignLeft },
-    { id: 'rotation', labelKey: 'rotationTab', icon: Layers },
-    { id: 'log',      labelKey: 'logTab',       icon: BarChart2 },
-  ];
-
   return (
-    // h-screen + overflow-hidden locks the page to viewport — no document scroll
     <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
+
+      {/* ── Zone 1: Compact score header ──────────────────────────────────── */}
       <ScoreHeader onShowSubstitution={() => dispatch({ type: 'SHOW_SUBSTITUTION' })} />
 
-      {/* Tab bar */}
-      <div className="flex bg-slate-800 border-b border-slate-700 flex-shrink-0">
-        {tabs.map(({ id, labelKey, icon: Icon }) => (
-          <button
-            key={id}
-            className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors ${
-              activeTab === id ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-500 hover:text-slate-300'
-            }`}
-            onClick={() => setActiveTab(id)}
-          >
-            <Icon size={13} /> {t(labelKey)}
-          </button>
-        ))}
-      </div>
-
-      {/* Mode toggle */}
-      <div className="flex-shrink-0 bg-slate-900 border-b border-slate-700/50 flex items-center justify-end px-3 py-1.5 gap-1.5">
+      {/* ── Control bar: mode toggle + set management ──────────────────────── */}
+      <div className="flex-shrink-0 bg-slate-900 border-b border-slate-700/50 flex items-center px-3 py-1.5 gap-1.5">
         <button
           className={`btn-3d text-[11px] font-semibold px-3 py-1.5 ${appMode === 'game' ? 'btn-3d-blue' : 'btn-3d-dark'}`}
           onClick={() => switchMode('game')}
@@ -189,164 +216,58 @@ export default function LiveMatchPage() {
         >
           {t('coachMode')}
         </button>
-      </div>
 
-      {/* Content — flex-1 with min-h-0 allows proper flex child shrinking */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex-1" />
 
-        {/* ── Players tab: fixed layout, no scroll ─────────────────────────── */}
-        {activeTab === 'players' && (
-          <div className="flex-1 min-h-0 flex flex-col px-2 pt-2 pb-1 gap-1.5 overflow-hidden">
-
-            {/* Hint + Add Player button */}
-            <div className="flex items-center justify-between flex-shrink-0 px-0.5">
-              <span className="text-slate-600 text-[10px] uppercase tracking-wider">
-                {t('tapPlayerHint')}
-              </span>
-              <button
-                className="flex items-center gap-1 text-[10px] font-bold text-green-400 hover:text-green-300 uppercase tracking-wider transition-colors"
-                onClick={openAddPlayer}
-              >
-                <UserPlus size={11} /> {t('addPlayer')}
-              </button>
-            </div>
-
-            {/* Active section label — only when bench exists */}
-            {benchPlayers.length > 0 && (
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 px-0.5 flex-shrink-0">
-                {t('activePlayersLabel')} · {activePlayers.length}
-              </div>
-            )}
-
-            {/* 2 × n grid — grows to fill available space, cells have equal height */}
-            <div className="grid grid-cols-2 gap-1.5 flex-shrink-0">
-              {activePlayers.map(p => <PlayerCell key={p.id} player={p} />)}
-            </div>
-
-            {/* Bench section */}
-            {benchPlayers.length > 0 && (
-              <div className="flex-shrink-0">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <div className="flex-1 h-px bg-slate-700/60" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
-                    {t('benchLabel')} · {benchPlayers.length}
-                  </span>
-                  <div className="flex-1 h-px bg-slate-700/60" />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {benchPlayers.map(p => <BenchChip key={p.id} player={p} />)}
-                </div>
-              </div>
-            )}
-
-            {/* Set management — pushed to bottom with mt-auto */}
-            <div className="mt-auto flex-shrink-0 pt-1">
-              {!showEndSetConfirm ? (
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 py-2 rounded-lg border border-orange-800 text-orange-400 hover:bg-orange-900/30 font-semibold text-xs transition-colors"
-                    onClick={() => setShowEndSetConfirm(true)}
-                  >
-                    {t('endSet')} {currentMatch.currentSetIndex + 1}
-                  </button>
-                  <button
-                    className="py-2 px-3 rounded-lg border border-red-900/60 text-red-600 hover:bg-red-900/20 font-semibold text-xs transition-colors flex items-center gap-1"
-                    onClick={() => { if (confirm(t('endMatchConfirm'))) dispatch({ type: 'END_MATCH' }); }}
-                  >
-                    <StopCircle size={12} /> {t('endMatch')}
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-orange-900/20 border border-orange-800 rounded-lg px-3 py-2">
-                  <div className="text-orange-300 font-semibold text-xs mb-2">
-                    {t('endSet')} {currentMatch.currentSetIndex + 1}? ({currentSet.homeScore}–{currentSet.opponentScore})
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 py-1.5 rounded-lg bg-orange-700 hover:bg-orange-600 text-white font-semibold text-xs transition-colors"
-                      onClick={handleEndSet}
-                    >
-                      {t('confirm')}
-                    </button>
-                    <button
-                      className="flex-1 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs transition-colors"
-                      onClick={() => setShowEndSetConfirm(false)}
-                    >
-                      {t('cancel')}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── Rotation tab: scrollable ──────────────────────────────────────── */}
-        {activeTab === 'rotation' && (
-          <div className="flex-1 overflow-y-auto p-3 animate-fade-in">
-            <RotationView />
+        {!showEndSetConfirm ? (
+          <>
             <button
-              className="mt-3 w-full py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors"
-              onClick={() => setShowRotationSetup(true)}
+              className="py-1.5 px-3 rounded-lg border border-orange-800/70 text-orange-500 hover:bg-orange-900/20 font-semibold text-xs transition-colors"
+              onClick={() => setShowEndSetConfirm(true)}
             >
-              {t('setStartingRotation')}
+              {t('endSet')} {currentMatch.currentSetIndex + 1}
             </button>
-
-            {currentSet.substitutions.length > 0 && (
-              <div className="mt-4">
-                <div className="text-slate-500 text-xs uppercase tracking-wider mb-2">{t('substitutions')}</div>
-                <div className="space-y-2">
-                  {currentSet.substitutions.map(sub => {
-                    const outP = players.find(p => p.id === sub.outPlayerId);
-                    const inP  = players.find(p => p.id === sub.inPlayerId);
-                    return (
-                      <div key={sub.id} className="bg-slate-800 rounded-lg px-4 py-2 flex items-center gap-3 text-sm">
-                        <span className="text-red-400">#{outP?.number} {outP?.name}</span>
-                        <span className="text-slate-500">→</span>
-                        <span className="text-green-400">#{inP?.number} {inP?.name}</span>
-                        <span className="text-slate-600 ml-auto text-xs">{sub.homeScore}-{sub.opponentScore}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Log tab: scrollable ───────────────────────────────────────────── */}
-        {activeTab === 'log' && (
-          <div className="flex-1 overflow-y-auto p-3 animate-fade-in">
-            <div className="text-slate-500 text-xs uppercase tracking-wider mb-3">{t('recentEvents')}</div>
-            {currentSet.events.length === 0 ? (
-              <div className="text-center text-slate-600 py-8">{t('noEventsRecorded')}</div>
-            ) : (
-              <div className="space-y-1">
-                {[...currentSet.events].reverse().map(event => {
-                  const player  = players.find(p => p.id === event.playerId);
-                  const evtConf = EVENT_CONFIG.find(e => e.type === event.type);
-                  const evtLabel = evtConf && EVENT_TYPE_I18N_KEY[evtConf.type]
-                    ? t(EVENT_TYPE_I18N_KEY[evtConf.type]) : evtConf?.label;
-                  return (
-                    <div key={event.id} className="flex items-center gap-3 py-2.5 px-3 rounded-lg bg-slate-800 border border-slate-700">
-                      <span className="text-lg leading-none">{evtConf?.emoji || '•'}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-white font-medium">{evtLabel || event.type}</div>
-                        <div className="text-xs text-slate-400 truncate">#{player?.number} {player?.name}</div>
-                      </div>
-                      <div className="text-xs text-slate-500 font-mono tabular-nums flex-shrink-0">
-                        {event.homeScore}–{event.opponentScore}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <button
+              className="py-1.5 px-2.5 rounded-lg border border-red-900/60 text-red-600 hover:bg-red-900/20 font-semibold text-xs transition-colors flex items-center gap-1"
+              onClick={() => { if (confirm(t('endMatchConfirm'))) dispatch({ type: 'END_MATCH' }); }}
+            >
+              <StopCircle size={11} /> {t('endMatch')}
+            </button>
+          </>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className="text-orange-400 text-xs font-semibold">
+              {t('endSet')} {currentMatch.currentSetIndex + 1}? ({currentSet.homeScore}–{currentSet.opponentScore})
+            </span>
+            <button
+              className="py-1 px-2.5 rounded-lg bg-orange-700 hover:bg-orange-600 text-white text-xs font-bold transition-colors"
+              onClick={handleEndSet}
+            >
+              {t('confirm')}
+            </button>
+            <button
+              className="py-1 px-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs transition-colors"
+              onClick={() => setShowEndSetConfirm(false)}
+            >
+              {t('cancel')}
+            </button>
           </div>
         )}
       </div>
 
-      {/* Bottom nav */}
+      {/* ── Zone 2: Court players — 2×3 grid fills available space ─────────── */}
+      <div className="flex-1 min-h-0 p-2 grid grid-cols-2 grid-rows-3 gap-1.5">
+        {courtPlayers.map(p => <PlayerCell key={p.id} player={p} />)}
+        {/* Empty slots if fewer than 6 players on court */}
+        {Array.from({ length: Math.max(0, 6 - courtPlayers.length) }).map((_, i) => (
+          <div key={`empty-${i}`} className="rounded-xl border border-slate-700/30 border-dashed bg-slate-800/20" />
+        ))}
+      </div>
+
+      {/* ── Zone 3: Mini court rotation — always visible ────────────────────── */}
+      <MiniCourtPanel />
+
+      {/* ── Bottom nav ──────────────────────────────────────────────────────── */}
       <div className="flex border-t border-slate-700 bg-slate-900 flex-shrink-0 gap-2 p-2">
         <button
           className="btn-3d btn-3d-nav flex-1 py-4 gap-1.5 text-base font-semibold"
@@ -368,88 +289,11 @@ export default function LiveMatchPage() {
         </button>
       </div>
 
-      {/* Add Player modal */}
-      {showAddPlayer && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          onClick={() => setShowAddPlayer(false)}
-        >
-          <div className="absolute inset-0 bg-black/60" />
-          <div
-            className="relative w-full max-w-sm bg-slate-800 rounded-2xl border border-slate-600 p-5 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-bold text-lg">{t('addPlayer')}</h3>
-              <button
-                className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors"
-                onClick={() => setShowAddPlayer(false)}
-              >
-                <X size={15} className="text-slate-400" />
-              </button>
-            </div>
-
-            <div className="space-y-3 mb-4">
-              {/* Jersey number */}
-              <div>
-                <label className="text-slate-400 text-xs uppercase tracking-wider font-semibold block mb-1.5">
-                  {t('jerseyNumber')}
-                </label>
-                <input
-                  type="number"
-                  value={newNumber}
-                  onChange={e => { setNewNumber(e.target.value); setAddError(''); }}
-                  placeholder="#"
-                  min="1" max="99"
-                  autoFocus
-                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white text-xl font-bold text-center focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-              {/* Player name (optional) */}
-              <div>
-                <label className="text-slate-400 text-xs uppercase tracking-wider font-semibold block mb-1.5">
-                  {t('playerName')}
-                </label>
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={e => { setNewName(e.target.value); setAddError(''); }}
-                  placeholder={t('nameOptional')}
-                  onKeyDown={e => e.key === 'Enter' && handleAddPlayer()}
-                  className="w-full bg-slate-700 border border-slate-600 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-            </div>
-
-            {addError && (
-              <div className="text-red-400 text-xs mb-3">{addError}</div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                className="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors"
-                onClick={() => setShowAddPlayer(false)}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                className="flex-1 btn-3d btn-3d-green py-3 text-white font-bold text-sm"
-                onClick={handleAddPlayer}
-              >
-                {t('add')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Modals */}
       {selectedPlayerId && (appMode === 'game' ? <GameModeButtons /> : <EventButtons />)}
       {showSubstitution && <SubstitutionModal onClose={() => dispatch({ type: 'HIDE_SUBSTITUTION' })} />}
       {showCourtDraw && <CourtDrawModal />}
       {showHeatmap && <HeatmapModal />}
-      {/* Serve setup is shown first (mandatory); rotation setup only appears after serve is chosen */}
       {needsServeSetup && <ServeSetupModal />}
       {!needsServeSetup && (showRotationSetup || needsRotationSetup) && (
         <RotationSetupModal onClose={handleRotationSetupClose} />

@@ -49,8 +49,8 @@ export default function ScoreHeader({ onShowSubstitution }) {
 
   const setsWon  = currentMatch.sets.filter(s => s.winner === 'home').length;
   const setsLost = currentMatch.sets.filter(s => s.winner === 'opponent').length;
-  const servingTeam = currentMatch.servingTeam;
-  const isHomeServing = servingTeam === 'home';
+  const servingTeam    = currentMatch.servingTeam;
+  const isHomeServing  = servingTeam === 'home';
   const servingTeamName  = isHomeServing ? currentMatch.homeTeam.name  : currentMatch.opponentTeam.name;
   const otherTeamName    = isHomeServing ? currentMatch.opponentTeam.name : currentMatch.homeTeam.name;
   const otherServingTeam = isHomeServing ? 'opponent' : 'home';
@@ -66,9 +66,9 @@ export default function ScoreHeader({ onShowSubstitution }) {
     <div className="bg-slate-900 border-b border-slate-700 select-none flex-shrink-0">
 
       {/* Set indicator dots */}
-      <div className="flex justify-center gap-2 pt-2 pb-1">
+      <div className="flex justify-center gap-2 pt-1.5 pb-0.5">
         {currentMatch.sets.map((s, i) => (
-          <div key={i} className={`w-2 h-2 rounded-full ${
+          <div key={i} className={`w-1.5 h-1.5 rounded-full ${
             s.winner === 'home'     ? 'bg-green-400' :
             s.winner === 'opponent' ? 'bg-red-400'   :
             i === currentMatch.currentSetIndex ? 'bg-blue-400 animate-pulse' : 'bg-slate-600'
@@ -78,21 +78,21 @@ export default function ScoreHeader({ onShowSubstitution }) {
 
       {/* ── Scoreboard panel ──────────────────────────────────────────────── */}
       <div
-        className="mx-3 mb-2 rounded-2xl border border-slate-700/60 overflow-hidden"
+        className="mx-3 mb-1.5 rounded-2xl border border-slate-700/60 overflow-hidden"
         style={{ background: 'linear-gradient(160deg, #0d1117 0%, #080d18 100%)' }}
       >
         {/* Team names row */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <div className="flex items-center justify-between px-4 pt-2 pb-1">
           <div className="flex-1 min-w-0">
             <div className={`font-black text-sm uppercase tracking-wide truncate transition-colors ${
               isHomeServing ? 'text-green-200' : 'text-slate-400'
             }`}>
               {currentMatch.homeTeam.name}
             </div>
-            <div className="text-green-600 text-[11px] font-bold mt-0.5">{setsWon} {t('setsLabel')}</div>
+            <div className="text-green-700 text-[10px] font-bold">{setsWon} {t('setsLabel')}</div>
           </div>
-          <div className="px-3 flex-shrink-0 text-center">
-            <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
+          <div className="px-3 flex-shrink-0">
+            <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest text-center">
               {t('setLabel')} {currentMatch.currentSetIndex + 1}
             </div>
           </div>
@@ -102,106 +102,99 @@ export default function ScoreHeader({ onShowSubstitution }) {
             }`}>
               {currentMatch.opponentTeam.name}
             </div>
-            <div className="text-red-600 text-[11px] font-bold mt-0.5">{setsLost} {t('setsLabel')}</div>
+            <div className="text-red-700 text-[10px] font-bold">{setsLost} {t('setsLabel')}</div>
           </div>
         </div>
 
-        {/* ── Prominent serving indicator ──────────────────────────────── */}
-        <div className={`mx-3 mb-3 rounded-xl flex items-center justify-between px-3 py-2.5 ${
+        {/* ── Serving indicator + Sub button (combined row) ─────────────── */}
+        <div className={`mx-3 mb-2 rounded-xl flex items-center gap-2 px-2.5 py-1.5 ${
           isHomeServing
             ? 'bg-green-900/70 border border-green-700/60'
             : 'bg-red-900/60 border border-red-700/60'
         }`}>
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-2xl leading-none flex-shrink-0 animate-pulse">🏐</span>
-            <div className="min-w-0">
-              <div className={`font-black text-base leading-tight truncate ${
-                isHomeServing ? 'text-green-100' : 'text-red-100'
-              }`}>
-                {servingTeamName}
-              </div>
-              <div className={`text-[10px] font-bold uppercase tracking-widest ${
-                isHomeServing ? 'text-green-400' : 'text-red-400'
-              }`}>
-                {t('serving')}
-              </div>
-            </div>
+          <span className="text-xl leading-none flex-shrink-0 animate-pulse">🏐</span>
+          <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+            <span className={`font-black text-sm truncate leading-tight ${
+              isHomeServing ? 'text-green-100' : 'text-red-100'
+            }`}>
+              {servingTeamName}
+            </span>
+            <span className={`text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${
+              isHomeServing ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {t('serving')}
+            </span>
           </div>
           <button
-            className="flex-shrink-0 ml-2 border border-slate-500/60 rounded-lg px-2.5 py-1.5 text-slate-400 text-[10px] font-semibold uppercase tracking-wide hover:border-slate-300 hover:text-slate-200 active:bg-slate-700/50 transition-all"
+            className="flex-shrink-0 border border-slate-500/50 rounded-lg px-2 py-1 text-slate-400 text-[9px] font-semibold uppercase tracking-wide hover:border-slate-300 hover:text-slate-200 active:bg-slate-700/50 transition-all"
             onClick={() => setShowChangeServe(true)}
           >
             {t('changeServe')}
           </button>
+          <button
+            className="flex-shrink-0 btn-3d btn-3d-blue text-[11px] px-3 py-1.5 gap-1 font-semibold"
+            onClick={onShowSubstitution}
+          >
+            <Shuffle size={12} /> {t('sub')}
+          </button>
         </div>
 
-        {/* Score digits + +/- buttons */}
-        <div className="flex items-center px-3 pb-4 pt-0">
+        {/* ── Score digits + buttons (compact) ─────────────────────────── */}
+        <div className="flex items-center px-3 pb-3 pt-0 gap-3">
 
-          {/* Home score */}
-          <div className="flex-1 flex flex-col items-center">
+          {/* Home score column */}
+          <div className="flex-1 flex flex-col items-center gap-1">
+            <button
+              className="btn-3d btn-3d-green w-10 h-10"
+              onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'home', delta: 1 })}
+            >
+              <ChevronUp size={20} />
+            </button>
             <div
               className={`font-mono font-black leading-none tabular-nums transition-all duration-200 ${flashHome ? 'scale-110' : ''}`}
               style={{
-                fontSize: 'clamp(4rem, 12vw, 6.5rem)',
+                fontSize: 'clamp(2rem, 7vw, 2.75rem)',
                 color: flashHome ? '#4ade80' : '#22c55e',
-                textShadow: '0 0 40px rgba(34,197,94,0.55), 0 0 8px rgba(34,197,94,0.3)',
+                textShadow: '0 0 24px rgba(34,197,94,0.5), 0 0 6px rgba(34,197,94,0.3)',
               }}
             >
               {String(currentSet.homeScore).padStart(2, '0')}
             </div>
-            <div className="flex gap-3 mt-3">
-              <button
-                className="btn-3d btn-3d-green w-14 h-14"
-                onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'home', delta: 1 })}
-              >
-                <ChevronUp size={28} />
-              </button>
-              <button
-                className="btn-3d btn-3d-slate w-14 h-14"
-                onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'home', delta: -1 })}
-              >
-                <ChevronDown size={28} />
-              </button>
-            </div>
-          </div>
-
-          {/* Sub button — center */}
-          <div className="flex items-center justify-center px-2">
             <button
-              className="btn-3d btn-3d-blue text-xs px-3 py-2.5 gap-1 font-semibold"
-              onClick={onShowSubstitution}
+              className="btn-3d btn-3d-slate w-10 h-10"
+              onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'home', delta: -1 })}
             >
-              <Shuffle size={14} /> {t('sub')}
+              <ChevronDown size={20} />
             </button>
           </div>
 
-          {/* Opponent score */}
-          <div className="flex-1 flex flex-col items-center">
+          {/* Divider */}
+          <div className="text-slate-600 font-black text-2xl flex-shrink-0 pb-1">:</div>
+
+          {/* Opponent score column */}
+          <div className="flex-1 flex flex-col items-center gap-1">
+            <button
+              className="btn-3d btn-3d-red w-10 h-10"
+              onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'opponent', delta: 1 })}
+            >
+              <ChevronUp size={20} />
+            </button>
             <div
               className={`font-mono font-black leading-none tabular-nums transition-all duration-200 ${flashOpp ? 'scale-110' : ''}`}
               style={{
-                fontSize: 'clamp(4rem, 12vw, 6.5rem)',
+                fontSize: 'clamp(2rem, 7vw, 2.75rem)',
                 color: flashOpp ? '#f87171' : '#ef4444',
-                textShadow: '0 0 40px rgba(239,68,68,0.55), 0 0 8px rgba(239,68,68,0.3)',
+                textShadow: '0 0 24px rgba(239,68,68,0.5), 0 0 6px rgba(239,68,68,0.3)',
               }}
             >
               {String(currentSet.opponentScore).padStart(2, '0')}
             </div>
-            <div className="flex gap-3 mt-3">
-              <button
-                className="btn-3d btn-3d-red w-14 h-14"
-                onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'opponent', delta: 1 })}
-              >
-                <ChevronUp size={28} />
-              </button>
-              <button
-                className="btn-3d btn-3d-slate w-14 h-14"
-                onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'opponent', delta: -1 })}
-              >
-                <ChevronDown size={28} />
-              </button>
-            </div>
+            <button
+              className="btn-3d btn-3d-slate w-10 h-10"
+              onClick={() => dispatch({ type: 'ADJUST_SCORE', team: 'opponent', delta: -1 })}
+            >
+              <ChevronDown size={20} />
+            </button>
           </div>
 
         </div>
@@ -209,7 +202,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
 
       {/* Undo bar */}
       <button
-        className={`w-full flex items-center justify-between px-4 py-2.5 border-t transition-all ${
+        className={`w-full flex items-center justify-between px-4 py-2 border-t transition-all ${
           lastEvent
             ? undoFlash
               ? 'bg-amber-900/60 border-amber-700'
@@ -220,7 +213,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
         disabled={!lastEvent}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <RotateCcw size={15} className={undoFlash ? 'text-amber-300' : 'text-slate-400'} />
+          <RotateCcw size={13} className={undoFlash ? 'text-amber-300' : 'text-slate-400'} />
           <span className={`text-xs font-semibold ${undoFlash ? 'text-amber-300' : 'text-slate-400'}`}>
             {t('undoAction')}
           </span>
