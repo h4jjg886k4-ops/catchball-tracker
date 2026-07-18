@@ -117,8 +117,8 @@ export const translations = {
   // ── Score header ─────────────────────────────────────────────────────────
   setLabel:            { en: 'Set',      he: 'סט' },
   setsLabel:           { en: 'Sets',     he: 'סטים' },
-  serving:             { en: '▶ Serve',  he: '▶ מגיש' },
-  receiving:           { en: 'Receive ◀', he: '◀ מקבל' },
+  serving:             { en: 'Serving',  he: 'מגיש' },
+  receiving:           { en: 'Receiving', he: 'מקבל' },
   sub:                 { en: 'Sub',      he: 'חילוף' },
   tapToUndo:           { en: 'Tap to undo', he: 'לחץ לביטול' },
   noEventsYet:         { en: 'No events yet', he: 'אין אירועים' },
@@ -304,6 +304,14 @@ export const translations = {
   rallyLabel:           { en: 'Rally',                he: 'קרב' },
   totalPtsLabel:        { en: 'Total Pts',            he: "נק' כולל" },
   totalErrLabel:        { en: 'Total Err',            he: "שג' כולל" },
+
+  // ── Serve setup ──────────────────────────────────────────────────────────
+  whoServesFirst:      { en: 'Who serves first?',      he: 'מי מגיש ראשון?' },
+  myTeam:              { en: 'My Team',                he: 'הקבוצה שלי' },
+  // ── Reopen match ─────────────────────────────────────────────────────────
+  reopenMatch:         { en: 'Reopen Match',           he: 'פתח משחק מחדש' },
+  reopenConfirm:       { en: 'Are you sure you want to reopen this match? You will be able to continue logging events.', he: 'האם אתה בטוח שברצונך לפתוח את המשחק מחדש?' },
+  yesReopen:           { en: 'Yes, Reopen',            he: 'כן, פתח מחדש' },
 
   // ── History page ──────────────────────────────────────────────────────────
   searchMatches:       { en: 'Search matches...',   he: 'חפש משחקים...' },

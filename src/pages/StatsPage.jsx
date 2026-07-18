@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Download, FileSpreadsheet, FileText, BarChart2, User, Layers } from 'lucide-react';
+import { ArrowLeft, Download, FileSpreadsheet, FileText, BarChart2, User, Layers, RotateCcw } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS } from '../utils/constants';
@@ -104,6 +104,7 @@ export default function StatsPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [exporting, setExporting] = useState(false);
   const [selectedSetFilter, setSelectedSetFilter] = useState('all');
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
 
   if (!currentMatch) {
     return (
@@ -161,7 +162,7 @@ export default function StatsPage() {
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Header */}
       <div className="bg-slate-800 border-b border-slate-700 flex-shrink-0">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-4 py-3 relative">
           <div className="flex items-center gap-3">
             <button
               className="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors"
@@ -176,7 +177,15 @@ export default function StatsPage() {
               <div className="text-slate-400 text-xs">{new Date(currentMatch.date).toLocaleDateString()}</div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {currentMatch.status === 'completed' && !showReopenConfirm && (
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-800/60 hover:bg-amber-700/60 text-sm text-amber-300 transition-colors"
+                onClick={() => setShowReopenConfirm(true)}
+              >
+                <RotateCcw size={14} /> {t('reopenMatch')}
+              </button>
+            )}
             <button
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-green-800 text-sm text-white transition-colors"
               onClick={handleExportExcel}
@@ -192,6 +201,26 @@ export default function StatsPage() {
               <FileText size={14} /> PDF
             </button>
           </div>
+          {/* Reopen confirmation inline */}
+          {showReopenConfirm && (
+            <div className="absolute top-full left-0 right-0 z-20 bg-slate-800 border border-amber-700/60 shadow-2xl p-4 mx-3 mt-1 rounded-xl">
+              <p className="text-slate-300 text-sm mb-3">{t('reopenConfirm')}</p>
+              <div className="flex gap-2">
+                <button
+                  className="flex-1 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-semibold text-sm transition-colors"
+                  onClick={() => { dispatch({ type: 'REOPEN_MATCH' }); setShowReopenConfirm(false); }}
+                >
+                  {t('yesReopen')}
+                </button>
+                <button
+                  className="flex-1 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+                  onClick={() => setShowReopenConfirm(false)}
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Score summary */}

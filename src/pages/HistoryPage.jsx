@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trash2, BarChart2, Play, Search } from 'lucide-react';
+import { ArrowLeft, Trash2, BarChart2, Play, Search, RotateCcw } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS } from '../utils/constants';
@@ -10,6 +10,7 @@ export default function HistoryPage() {
   const { matches } = state;
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmReopen, setConfirmReopen] = useState(null);
 
   const filtered = matches.filter(m => {
     const q = search.toLowerCase();
@@ -128,6 +129,30 @@ export default function HistoryPage() {
                   </div>
                 )}
 
+                {/* Reopen confirmation */}
+                {confirmReopen === match.id && (
+                  <div className="mb-3 bg-amber-900/20 border border-amber-700/50 rounded-xl p-3">
+                    <p className="text-slate-300 text-xs mb-2">{t('reopenConfirm')}</p>
+                    <div className="flex gap-2">
+                      <button
+                        className="flex-1 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white font-semibold text-xs transition-colors"
+                        onClick={() => {
+                          dispatch({ type: 'REOPEN_MATCH', match });
+                          setConfirmReopen(null);
+                        }}
+                      >
+                        {t('yesReopen')}
+                      </button>
+                      <button
+                        className="flex-1 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs transition-colors"
+                        onClick={() => setConfirmReopen(null)}
+                      >
+                        {t('cancel')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   {isActive ? (
                     <button
@@ -137,12 +162,21 @@ export default function HistoryPage() {
                       <Play size={15} /> {t('resume')}
                     </button>
                   ) : (
-                    <button
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-                      onClick={() => handleOpen(match)}
-                    >
-                      <BarChart2 size={15} /> {t('viewStats')}
-                    </button>
+                    <>
+                      <button
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+                        onClick={() => handleOpen(match)}
+                      >
+                        <BarChart2 size={15} /> {t('viewStats')}
+                      </button>
+                      <button
+                        className="w-10 h-10 rounded-xl bg-amber-900/40 hover:bg-amber-800/60 flex items-center justify-center transition-colors flex-shrink-0"
+                        title={t('reopenMatch')}
+                        onClick={() => setConfirmReopen(confirmReopen === match.id ? null : match.id)}
+                      >
+                        <RotateCcw size={15} className="text-amber-400" />
+                      </button>
+                    </>
                   )}
 
                   {confirmDelete === match.id ? (

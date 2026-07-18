@@ -14,13 +14,14 @@ import SubstitutionModal from '../components/modals/SubstitutionModal';
 import CourtDrawModal from '../components/modals/CourtDrawModal';
 import HeatmapModal from '../components/modals/HeatmapModal';
 import RotationSetupModal from '../components/modals/RotationSetupModal';
+import ServeSetupModal from '../components/modals/ServeSetupModal';
 
 export default function LiveMatchPage() {
   const { state, dispatch, navigate } = useMatch();
   const { t } = useLanguage();
   const {
     currentMatch, selectedPlayerId,
-    showSubstitution, showCourtDraw, showHeatmap, needsRotationSetup,
+    showSubstitution, showCourtDraw, showHeatmap, needsRotationSetup, needsServeSetup,
   } = state;
   const [showRotationSetup, setShowRotationSetup] = useState(false);
   const [activeTab, setActiveTab] = useState('players');
@@ -448,7 +449,9 @@ export default function LiveMatchPage() {
       {showSubstitution && <SubstitutionModal onClose={() => dispatch({ type: 'HIDE_SUBSTITUTION' })} />}
       {showCourtDraw && <CourtDrawModal />}
       {showHeatmap && <HeatmapModal />}
-      {(showRotationSetup || needsRotationSetup) && (
+      {/* Serve setup is shown first (mandatory); rotation setup only appears after serve is chosen */}
+      {needsServeSetup && <ServeSetupModal />}
+      {!needsServeSetup && (showRotationSetup || needsRotationSetup) && (
         <RotationSetupModal onClose={handleRotationSetupClose} />
       )}
     </div>

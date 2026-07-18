@@ -74,6 +74,7 @@ const initialState = {
   showHeatmap: false,
   showSubstitution: false,
   needsRotationSetup: false,
+  needsServeSetup: false,
   lastScoreTeam: null,
   pendingCourtDraw: null,
   lastUndoneEvent: null,
@@ -86,10 +87,11 @@ function reducer(state, action) {
     case 'HYDRATE':
       return {
         ...state,
-        currentMatch: action.currentMatch ?? null,
-        matches:      action.matches      ?? [],
-        savedTeams:   action.savedTeams   ?? [],
-        appMode:      action.settings?.appMode ?? 'game',
+        currentMatch:    action.currentMatch ?? null,
+        matches:         action.matches      ?? [],
+        savedTeams:      action.savedTeams   ?? [],
+        appMode:         action.settings?.appMode ?? 'game',
+        needsServeSetup: action.needsServeSetup ?? false,
       };
 
     case 'RESET':
@@ -124,7 +126,7 @@ function reducer(state, action) {
 
     case 'SETUP_COMPLETE': {
       const match = createEmptyMatch(action.homeTeam, action.opponentTeam);
-      return { ...state, currentMatch: match, view: VIEWS.LIVE };
+      return { ...state, currentMatch: match, view: VIEWS.LIVE, needsServeSetup: true };
     }
 
     case 'LOAD_MATCH':
@@ -346,17 +348,54 @@ function reducer(state, action) {
         currentRotationIndex: 0,
         rotationHistory: [],
       };
-      return { ...state, currentMatch: updatedMatch, showHeatmap: false, needsRotationSetup: true };
+      return { ...state, currentMatch: updatedMatch, showHeatmap: false, needsRotationSetup: true, needsServeSetup: true };
+    }
+
+    case 'SET_SERVE_TEAM': {
+      const { servingTeam } = action;
+      const match = state.currentMatch;
+      const setIdx = match.currentSetIndex;
+      const updatedSet = { ...match.sets[setIdx], startServingTeam: servingTeam };
+      const updatedSets = [...match.sets];
+      updatedSets[setIdx] = updatedSet;
+      return {
+        ...state,
+        currentMatch: { ...match, sets: updatedSets, servingTeam },
+        needsServeSetup: false,
+      };
     }
 
     case 'END_MATCH': {
-      const match = { ...state.currentMatch, status: 'completed', endDate: Date.now() };
+      // Auto-finalise the current set if it hasn't been ended yet
+      const setIdx = state.currentMatch.currentSetIndex;
+      const curSet = state.currentMatch.sets[setIdx];
+      const autoWinner = curSet.homeScore > curSet.opponentScore ? 'home'
+                       : curSet.opponentScore > curSet.homeScore ? 'opponent'
+                       : null;
+      const finalSet = curSet.winner
+        ? curSet
+        : { ...curSet, status: 'completed', winner: autoWinner, endTime: Date.now() };
+      const setsWithFinal = [...state.currentMatch.sets];
+      setsWithFinal[setIdx] = finalSet;
+      const match = { ...state.currentMatch, sets: setsWithFinal, status: 'completed', endDate: Date.now() };
       return {
         ...state,
         currentMatch: match,
         matches: upsertMatch(match, state.matches),
         view: VIEWS.STATS,
         showHeatmap: false,
+      };
+    }
+
+    case 'REOPEN_MATCH': {
+      const base = action.match ?? state.currentMatch;
+      const match = { ...base, status: 'active', endDate: null };
+      return {
+        ...state,
+        currentMatch: match,
+        matches: upsertMatch(match, state.matches),
+        view: VIEWS.LIVE,
+        needsServeSetup: false,
       };
     }
 
@@ -489,8 +528,10 @@ export function MatchProvider({ children }) {
     ]).then(([currentMatch, matches, savedTeams, settings]) => {
       prevMatchesRef.current = matches;
       prevTeamsRef.current   = savedTeams;
-      dispatch({ type: 'HYDRATE', currentMatch, matches, savedTeams, settings });
-      // If the last session ended a match, restore the user directly to the stats screen
+      const setIdx = currentMatch?.currentSetIndex ?? 0;
+      const currentSetEvents = currentMatch?.sets?.[setIdx]?.events ?? [];
+      const needsServeSetup = currentMatch?.status === 'active' && currentSetEvents.length === 0;
+      dispatch({ type: 'HYDRATE', currentMatch, matches, savedTeams, settings, needsServeSetup });
       if (currentMatch?.status === 'completed') {
         dispatch({ type: 'SET_VIEW', payload: VIEWS.STATS });
       }
@@ -565,6 +606,15 @@ export function MatchProvider({ children }) {
         const finalMatch = { ...state.currentMatch, status: 'completed', endDate: Date.now() };
         saveCurrentMatchFS(user.uid, finalMatch).catch(console.error);
         saveMatchFS(user.uid, finalMatch).catch(console.error);
+      }
+      // Save immediately on reopen so state is consistent across refreshes
+      if (action.type === 'REOPEN_MATCH') {
+        const base = action.match ?? state.currentMatch;
+        if (base) {
+          const reopened = { ...base, status: 'active', endDate: null };
+          saveCurrentMatchFS(user.uid, reopened).catch(console.error);
+          saveMatchFS(user.uid, reopened).catch(console.error);
+        }
       }
     }
     dispatch(action);

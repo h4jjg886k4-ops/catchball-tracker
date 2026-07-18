@@ -70,36 +70,52 @@ export default function ScoreHeader({ onShowSubstitution }) {
         className="mx-3 mb-2 rounded-2xl border border-slate-700/60 overflow-hidden"
         style={{ background: 'linear-gradient(160deg, #0d1117 0%, #080d18 100%)' }}
       >
-        {/* Team names + sets won */}
+        {/* Team names + sets won + serving indicator */}
         <div className="flex items-start justify-between px-4 pt-3 pb-1">
+          {/* Home team */}
           <div className="flex-1 min-w-0">
-            <div className="text-white font-black text-sm uppercase tracking-wide truncate">
-              {currentMatch.homeTeam.name}
+            <div className="flex items-center gap-1">
+              {currentMatch.servingTeam === 'home' && (
+                <span className="text-base leading-none flex-shrink-0">🏐</span>
+              )}
+              <div className="text-white font-black text-sm uppercase tracking-wide truncate">
+                {currentMatch.homeTeam.name}
+              </div>
             </div>
-            <div className="text-green-500 text-[11px] font-bold">
-              {setsWon} {t('setsLabel')}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <div className="text-green-500 text-[11px] font-bold">{setsWon} {t('setsLabel')}</div>
+              {currentMatch.servingTeam === 'home' && (
+                <span className="text-[10px] font-bold text-green-300 bg-green-900/70 px-1.5 py-0.5 rounded-full leading-none">
+                  {t('serving')}
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1 px-3 flex-shrink-0">
+          {/* Center: set number only */}
+          <div className="flex flex-col items-center px-3 flex-shrink-0 pt-0.5">
             <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
               {t('setLabel')} {currentMatch.currentSetIndex + 1}
             </div>
-            <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-              currentMatch.servingTeam === 'home'
-                ? 'bg-green-900/80 text-green-300'
-                : 'bg-red-900/80 text-red-300'
-            }`}>
-              {currentMatch.servingTeam === 'home' ? t('serving') : t('receiving')}
-            </div>
           </div>
 
+          {/* Opponent team */}
           <div className="flex-1 min-w-0 text-right">
-            <div className="text-white font-black text-sm uppercase tracking-wide truncate">
-              {currentMatch.opponentTeam.name}
+            <div className="flex items-center justify-end gap-1">
+              <div className="text-white font-black text-sm uppercase tracking-wide truncate">
+                {currentMatch.opponentTeam.name}
+              </div>
+              {currentMatch.servingTeam === 'opponent' && (
+                <span className="text-base leading-none flex-shrink-0">🏐</span>
+              )}
             </div>
-            <div className="text-red-500 text-[11px] font-bold">
-              {setsLost} {t('setsLabel')}
+            <div className="flex items-center justify-end gap-1.5 mt-0.5">
+              {currentMatch.servingTeam === 'opponent' && (
+                <span className="text-[10px] font-bold text-red-300 bg-red-900/70 px-1.5 py-0.5 rounded-full leading-none">
+                  {t('serving')}
+                </span>
+              )}
+              <div className="text-red-500 text-[11px] font-bold">{setsLost} {t('setsLabel')}</div>
             </div>
           </div>
         </div>
