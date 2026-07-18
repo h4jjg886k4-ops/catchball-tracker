@@ -299,22 +299,28 @@ export default function StatsPage() {
                 <div className="px-4 py-3 border-b border-slate-700 text-slate-300 font-semibold text-sm flex items-center gap-2">
                   <Layers size={14} /> {t('rotEfficiency')}
                 </div>
-                <div className="grid grid-cols-6 divide-x divide-slate-700">
-                  {teamStats.rotationEfficiency.map(rot => (
-                    <div key={rot.position} className="text-center py-3 px-1">
-                      <div className={`font-bold text-lg ${
-                        rot.efficiency === null ? 'text-slate-600' :
-                        rot.efficiency >= 60 ? 'text-green-400' :
-                        rot.efficiency >= 40 ? 'text-yellow-400' : 'text-red-400'
-                      }`}>
-                        {rot.efficiency !== null ? `${rot.efficiency}%` : '—'}
+                <div className="divide-y divide-slate-700/50">
+                  {teamStats.rotationEfficiency.map(rot => {
+                    const names = rot.playerIds?.length
+                      ? rot.playerIds.map(id => players.find(p => p.id === id)?.name).filter(Boolean).join(' / ')
+                      : null;
+                    return (
+                      <div key={rot.position} className="flex items-center gap-3 px-4 py-2.5">
+                        <div className="text-slate-500 text-xs font-bold w-6 flex-shrink-0">R{rot.position}</div>
+                        <div className="flex-1 min-w-0 text-slate-300 text-xs truncate">{names || '—'}</div>
+                        <div className={`font-bold text-sm tabular-nums flex-shrink-0 ${
+                          rot.efficiency === null ? 'text-slate-600' :
+                          rot.efficiency >= 60 ? 'text-green-400' :
+                          rot.efficiency >= 40 ? 'text-yellow-400' : 'text-red-400'
+                        }`}>
+                          {rot.efficiency !== null ? `${rot.efficiency}%` : '—'}
+                        </div>
+                        <div className="text-slate-600 text-xs tabular-nums flex-shrink-0">
+                          ({rot.points}/{rot.rallies})
+                        </div>
                       </div>
-                      <div className="text-slate-500 text-xs mt-0.5">R{rot.position}</div>
-                      <div className="text-slate-600 text-[10px]">
-                        {rot.points}/{rot.rallies}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

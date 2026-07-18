@@ -163,11 +163,15 @@ export function calcTeamStats(sets) {
 export function calcRotationEfficiency(sets) {
   const pts    = Array(6).fill(0);
   const rallies = Array(6).fill(0);
+  const playerIdSets = Array(6).fill(null).map(() => new Set());
   sets.forEach(set => {
     (set.events || []).forEach(event => {
       const i = (event.rotationIndex || 0) % 6;
       rallies[i]++;
       if (HOME_SCORE_EVENTS.has(event.type)) pts[i]++;
+      if (Array.isArray(event.rotationSnapshot) && event.rotationSnapshot[0]) {
+        playerIdSets[i].add(event.rotationSnapshot[0]);
+      }
     });
   });
   return pts.map((p, i) => ({
@@ -175,6 +179,7 @@ export function calcRotationEfficiency(sets) {
     points: p,
     rallies: rallies[i],
     efficiency: rallies[i] > 0 ? Math.round(p / rallies[i] * 100) : null,
+    playerIds: [...playerIdSets[i]],
   }));
 }
 
