@@ -124,7 +124,8 @@ export const translations = {
   yes:                 { en: 'Yes',            he: 'כן' },
   sub:                 { en: 'Sub',            he: 'חילוף' },
   tapToUndo:           { en: 'Tap to undo', he: 'לחץ לביטול' },
-  noEventsYet:         { en: 'No events yet', he: 'אין אירועים' },
+  noEventsYet:         { en: 'No events yet',   he: 'אין אירועים' },
+  manualScore:         { en: 'Manual score +1', he: 'ניקוד ידני +1' },
   undoLabel:           { en: 'UNDO',     he: 'בטל' },
 
   // ── Live match page ───────────────────────────────────────────────────────

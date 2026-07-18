@@ -217,9 +217,9 @@ export default function ScoreHeader({ onShowSubstitution }) {
           <span className={`text-xs font-semibold ${undoFlash ? 'text-amber-300' : 'text-slate-400'}`}>
             {t('undoAction')}
           </span>
-          {lastEvent && lastEventConf ? (
+          {lastEvent ? (
             <span className={`text-xs truncate ${undoFlash ? 'text-amber-200' : 'text-slate-500'}`}>
-              {lastEventConf.emoji} {lastEventLabel}
+              {lastEventConf ? `${lastEventConf.emoji} ${lastEventLabel}` : t('manualScore')}
               {' '}({currentSet.homeScore}–{currentSet.opponentScore})
             </span>
           ) : (

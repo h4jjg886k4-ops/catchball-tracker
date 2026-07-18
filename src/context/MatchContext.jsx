@@ -298,17 +298,74 @@ function reducer(state, action) {
       const match = state.currentMatch;
       const setIndex = match.currentSetIndex;
       const currentSet = match.sets[setIndex];
+
       const newHomeScore     = team === 'home'     ? Math.max(0, currentSet.homeScore     + delta) : currentSet.homeScore;
       const newOpponentScore = team === 'opponent' ? Math.max(0, currentSet.opponentScore + delta) : currentSet.opponentScore;
-      const updatedSet = { ...currentSet, homeScore: newHomeScore, opponentScore: newOpponentScore };
+
+      let newServingTeam     = match.servingTeam;
+      let newRotationIndex   = match.currentRotationIndex;
+      let newRotation        = currentSet.rotation;
+      let newRotationVersion = match.rotationVersion || 0;
+      let newRotationHistory = [...(match.rotationHistory || [])];
+      let newEvents          = currentSet.events;
+
+      if (delta > 0) {
+        // Snapshot pre-event state so we can store it on the synthetic event for undo
+        const preRotationIndex = match.currentRotationIndex;
+        const preServingTeam   = match.servingTeam;
+        const preRotation      = currentSet.rotation;
+
+        if (team === 'home') {
+          newServingTeam = 'home';
+          if (match.servingTeam === 'opponent') {
+            // Side-out: home wins serve back + rotation
+            newRotationHistory = [...newRotationHistory, { rotation: preRotation, rotationIndex: preRotationIndex }];
+            newRotationIndex   = (newRotationIndex + 1) % 6;
+            newRotation        = applyRotation(preRotation);
+            newRotationVersion++;
+          }
+        } else {
+          newServingTeam = 'opponent';
+        }
+
+        // Synthetic event so this score adjustment appears in the log and is undoable
+        newEvents = [...currentSet.events, {
+          id: uuidv4(),
+          type: 'manual_score',
+          scoringTeam: team,
+          playerId: null,
+          timestamp: Date.now(),
+          homeScore: newHomeScore,
+          opponentScore: newOpponentScore,
+          rotationIndex: preRotationIndex,
+          servingTeam: preServingTeam,
+          rotationSnapshot: preRotation,
+        }];
+      }
+
+      const updatedSet = {
+        ...currentSet,
+        homeScore: newHomeScore,
+        opponentScore: newOpponentScore,
+        rotation: newRotation,
+        events: newEvents,
+      };
       const updatedSets = [...match.sets];
       updatedSets[setIndex] = updatedSet;
-      const updatedMatch = { ...match, sets: updatedSets };
+      const updatedMatch = {
+        ...match,
+        sets: updatedSets,
+        servingTeam: newServingTeam,
+        currentRotationIndex: newRotationIndex,
+        rotationVersion: newRotationVersion,
+        rotationHistory: newRotationHistory,
+      };
       const showCourtDraw = team === 'opponent' && delta > 0;
       return {
         ...state,
         currentMatch: updatedMatch,
         showCourtDraw,
+        lastUndoneEvent: null,
         pendingCourtDraw: showCourtDraw
           ? { setIndex, score: { home: newHomeScore, opponent: newOpponentScore }, timestamp: Date.now(), eventType: 'manual' }
           : state.pendingCourtDraw,
@@ -408,18 +465,24 @@ function reducer(state, action) {
       const removedEvent = currentSet.events[currentSet.events.length - 1];
       const events = currentSet.events.slice(0, -1);
       const prevEvent = events[events.length - 1];
-      const newHomeScore = prevEvent ? prevEvent.homeScore : 0;
+      const newHomeScore     = prevEvent ? prevEvent.homeScore     : 0;
       const newOpponentScore = prevEvent ? prevEvent.opponentScore : 0;
-      const causedRotation = HOME_SCORE_EVENTS.has(removedEvent.type) && removedEvent.servingTeam === 'opponent';
-      const rotationHistory = match.rotationHistory || [];
+
+      // Detect whether this event caused a side-out rotation so we can pop rotationHistory
+      const isHomeScoringEvent = HOME_SCORE_EVENTS.has(removedEvent.type) ||
+        (removedEvent.type === 'manual_score' && removedEvent.scoringTeam === 'home');
+      const causedRotation = isHomeScoringEvent && removedEvent.servingTeam === 'opponent';
+
+      const rotationHistory    = match.rotationHistory || [];
       const newRotationHistory = causedRotation && rotationHistory.length > 0
         ? rotationHistory.slice(0, -1) : rotationHistory;
+
       const updatedSet = {
         ...currentSet,
         events,
         homeScore: newHomeScore,
         opponentScore: newOpponentScore,
-        rotation: removedEvent.rotationSnapshot || currentSet.rotation,
+        rotation: removedEvent.rotationSnapshot ?? currentSet.rotation,
       };
       const updatedSets = [...match.sets];
       updatedSets[setIndex] = updatedSet;
@@ -430,6 +493,7 @@ function reducer(state, action) {
           sets: updatedSets,
           servingTeam: removedEvent.servingTeam,
           currentRotationIndex: removedEvent.rotationIndex,
+          rotationVersion: (match.rotationVersion || 0) + 1,
           rotationHistory: newRotationHistory,
         },
         lastUndoneEvent: removedEvent,
