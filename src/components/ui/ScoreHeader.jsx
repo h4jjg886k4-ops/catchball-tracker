@@ -1,28 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RotateCcw, Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { EVENT_TYPE_I18N_KEY } from '../../i18n/translations';
-import { EVENT_CONFIG } from '../../utils/constants';
 
 export default function ScoreHeader({ onShowSubstitution }) {
   const { state, dispatch } = useMatch();
   const { t } = useLanguage();
-  const { currentMatch, lastUndoneEvent } = state;
+  const { currentMatch } = state;
   const [flashHome, setFlashHome] = useState(false);
   const [flashOpp,  setFlashOpp]  = useState(false);
-  const [undoFlash, setUndoFlash] = useState(false);
   const [showChangeServe, setShowChangeServe] = useState(false);
   const prevHomeRef = useRef(0);
   const prevOppRef  = useRef(0);
 
   if (!currentMatch) return null;
-  const currentSet     = currentMatch.sets[currentMatch.currentSetIndex];
-  const lastEvent      = currentSet.events[currentSet.events.length - 1];
-  const lastEventConf  = lastEvent ? EVENT_CONFIG.find(e => e.type === lastEvent.type) : null;
-  const lastEventLabel = lastEventConf && EVENT_TYPE_I18N_KEY[lastEventConf.type]
-    ? t(EVENT_TYPE_I18N_KEY[lastEventConf.type])
-    : lastEventConf?.label;
+  const currentSet    = currentMatch.sets[currentMatch.currentSetIndex];
+  const setsWon       = currentMatch.sets.filter(s => s.winner === 'home').length;
+  const setsLost      = currentMatch.sets.filter(s => s.winner === 'opponent').length;
+  const servingTeam   = currentMatch.servingTeam;
+  const isHomeServing = servingTeam === 'home';
+  const servingTeamName  = isHomeServing ? currentMatch.homeTeam.name  : currentMatch.opponentTeam.name;
+  const otherTeamName    = isHomeServing ? currentMatch.opponentTeam.name : currentMatch.homeTeam.name;
+  const otherServingTeam = isHomeServing ? 'opponent' : 'home';
 
   useEffect(() => {
     if (currentSet.homeScore !== prevHomeRef.current) {
@@ -39,23 +38,6 @@ export default function ScoreHeader({ onShowSubstitution }) {
       prevOppRef.current = currentSet.opponentScore;
     }
   }, [currentSet.opponentScore]);
-
-  useEffect(() => {
-    if (lastUndoneEvent) {
-      setUndoFlash(true);
-      setTimeout(() => setUndoFlash(false), 600);
-    }
-  }, [lastUndoneEvent]);
-
-  const setsWon  = currentMatch.sets.filter(s => s.winner === 'home').length;
-  const setsLost = currentMatch.sets.filter(s => s.winner === 'opponent').length;
-  const servingTeam    = currentMatch.servingTeam;
-  const isHomeServing  = servingTeam === 'home';
-  const servingTeamName  = isHomeServing ? currentMatch.homeTeam.name  : currentMatch.opponentTeam.name;
-  const otherTeamName    = isHomeServing ? currentMatch.opponentTeam.name : currentMatch.homeTeam.name;
-  const otherServingTeam = isHomeServing ? 'opponent' : 'home';
-
-  function handleUndo() { dispatch({ type: 'UNDO_LAST_EVENT' }); }
 
   function confirmChangeServe() {
     dispatch({ type: 'SET_SERVE_TEAM', servingTeam: otherServingTeam });
@@ -81,7 +63,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
         className="mx-3 mb-1.5 rounded-2xl border border-slate-700/60 overflow-hidden"
         style={{ background: 'linear-gradient(160deg, #0d1117 0%, #080d18 100%)' }}
       >
-        {/* Team names row */}
+        {/* Team names */}
         <div className="flex items-center justify-between px-4 pt-2 pb-1">
           <div className="flex-1 min-w-0">
             <div className={`font-black text-sm uppercase tracking-wide truncate transition-colors ${
@@ -106,7 +88,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
           </div>
         </div>
 
-        {/* ── Serving indicator + Sub button (combined row) ─────────────── */}
+        {/* ── Serving indicator + Sub button ────────────────────────────── */}
         <div className={`mx-3 mb-2 rounded-xl flex items-center gap-2 px-2.5 py-1.5 ${
           isHomeServing
             ? 'bg-green-900/70 border border-green-700/60'
@@ -139,10 +121,10 @@ export default function ScoreHeader({ onShowSubstitution }) {
           </button>
         </div>
 
-        {/* ── Score digits + buttons (compact) ─────────────────────────── */}
+        {/* ── Score digits + buttons ─────────────────────────────────────── */}
         <div className="flex items-center px-3 pb-3 pt-0 gap-3">
 
-          {/* Home score column */}
+          {/* Home */}
           <div className="flex-1 flex flex-col items-center gap-1">
             <button
               className="btn-3d btn-3d-green w-10 h-10"
@@ -155,7 +137,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
               style={{
                 fontSize: 'clamp(2rem, 7vw, 2.75rem)',
                 color: flashHome ? '#4ade80' : '#22c55e',
-                textShadow: '0 0 24px rgba(34,197,94,0.5), 0 0 6px rgba(34,197,94,0.3)',
+                textShadow: '0 0 24px rgba(34,197,94,0.5)',
               }}
             >
               {String(currentSet.homeScore).padStart(2, '0')}
@@ -168,10 +150,9 @@ export default function ScoreHeader({ onShowSubstitution }) {
             </button>
           </div>
 
-          {/* Divider */}
           <div className="text-slate-600 font-black text-2xl flex-shrink-0 pb-1">:</div>
 
-          {/* Opponent score column */}
+          {/* Opponent */}
           <div className="flex-1 flex flex-col items-center gap-1">
             <button
               className="btn-3d btn-3d-red w-10 h-10"
@@ -184,7 +165,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
               style={{
                 fontSize: 'clamp(2rem, 7vw, 2.75rem)',
                 color: flashOpp ? '#f87171' : '#ef4444',
-                textShadow: '0 0 24px rgba(239,68,68,0.5), 0 0 6px rgba(239,68,68,0.3)',
+                textShadow: '0 0 24px rgba(239,68,68,0.5)',
               }}
             >
               {String(currentSet.opponentScore).padStart(2, '0')}
@@ -200,40 +181,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
         </div>
       </div>
 
-      {/* Undo bar */}
-      <button
-        className={`w-full flex items-center justify-between px-4 py-2 border-t transition-all ${
-          lastEvent
-            ? undoFlash
-              ? 'bg-amber-900/60 border-amber-700'
-              : 'bg-slate-700/60 border-slate-600 hover:bg-amber-900/30 hover:border-amber-800 active:bg-amber-900/50'
-            : 'bg-slate-800/40 border-slate-700/50 opacity-40 cursor-not-allowed'
-        }`}
-        onClick={lastEvent ? handleUndo : undefined}
-        disabled={!lastEvent}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <RotateCcw size={13} className={undoFlash ? 'text-amber-300' : 'text-slate-400'} />
-          <span className={`text-xs font-semibold ${undoFlash ? 'text-amber-300' : 'text-slate-400'}`}>
-            {t('undoAction')}
-          </span>
-          {lastEvent ? (
-            <span className={`text-xs truncate ${undoFlash ? 'text-amber-200' : 'text-slate-500'}`}>
-              {lastEventConf ? `${lastEventConf.emoji} ${lastEventLabel}` : t('manualScore')}
-              {' '}({currentSet.homeScore}–{currentSet.opponentScore})
-            </span>
-          ) : (
-            <span className="text-xs text-slate-600">{t('noEventsYet')}</span>
-          )}
-        </div>
-        {lastEvent && (
-          <span className={`text-xs flex-shrink-0 ml-2 ${undoFlash ? 'text-amber-300' : 'text-slate-500'}`}>
-            {t('tapToUndo')} →
-          </span>
-        )}
-      </button>
-
-      {/* ── Change serve confirmation modal ───────────────────────────────── */}
+      {/* ── Change serve modal ─────────────────────────────────────────────── */}
       {showChangeServe && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
@@ -264,7 +212,6 @@ export default function ScoreHeader({ onShowSubstitution }) {
           </div>
         </div>
       )}
-
     </div>
   );
 }
