@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shuffle, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
 
-export default function ScoreHeader({ onShowSubstitution }) {
+export default function ScoreHeader() {
   const { state, dispatch } = useMatch();
   const { t } = useLanguage();
   const { currentMatch } = state;
@@ -112,12 +112,6 @@ export default function ScoreHeader({ onShowSubstitution }) {
             onClick={() => setShowChangeServe(true)}
           >
             {t('changeServe')}
-          </button>
-          <button
-            className="flex-shrink-0 btn-3d btn-3d-blue text-[11px] px-3 py-1.5 gap-1 font-semibold"
-            onClick={onShowSubstitution}
-          >
-            <Shuffle size={12} /> {t('sub')}
           </button>
         </div>
 

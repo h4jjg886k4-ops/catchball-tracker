@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw } from 'lucide-react';
+import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw, Shuffle } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS, POSITION_ABBR, EVENT_CONFIG } from '../utils/constants';
@@ -36,14 +36,14 @@ export default function LiveMatchPage() {
   useEffect(() => {
     if (lastUndoneEvent) {
       setUndoFlash(true);
-      const t = setTimeout(() => setUndoFlash(false), 600);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setUndoFlash(false), 600);
+      return () => clearTimeout(timer);
     }
   }, [lastUndoneEvent]);
 
   if (!currentMatch) {
     return (
-      <div className="h-screen bg-slate-900 flex items-center justify-center">
+      <div style={{ height: '100dvh' }} className="bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-slate-400 mb-4">{t('noMatchActive')}</div>
           <button className="px-6 py-3 bg-blue-700 rounded-xl text-white" onClick={() => navigate(VIEWS.HOME)}>
@@ -58,13 +58,12 @@ export default function LiveMatchPage() {
   const players    = currentMatch.homeTeam.players;
   const allEvents  = currentSet.events || [];
 
-  // Last event for undo label
-  const lastEvent     = allEvents[allEvents.length - 1];
-  const lastEventConf = lastEvent ? EVENT_CONFIG.find(e => e.type === lastEvent.type) : null;
+  const lastEvent      = allEvents[allEvents.length - 1];
+  const lastEventConf  = lastEvent ? EVENT_CONFIG.find(e => e.type === lastEvent.type) : null;
   const lastEventLabel = lastEventConf && EVENT_TYPE_I18N_KEY[lastEventConf.type]
     ? t(EVENT_TYPE_I18N_KEY[lastEventConf.type]) : lastEventConf?.label;
 
-  // 6 players currently on court (substitutions applied)
+  // Current on-court players (rotation + substitutions applied)
   const currentOnCourt = new Set(currentSet.rotation.filter(id => id !== ''));
   for (const sub of currentSet.substitutions) {
     currentOnCourt.delete(sub.outPlayerId);
@@ -79,50 +78,41 @@ export default function LiveMatchPage() {
     if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
   }
 
-  // ── Compact player button ─────────────────────────────────────────────────
+  // ── Compact player card ──────────────────────────────────────────────────────
   function PlayerCell({ player }) {
     const stats = calcPlayerStats(player.id, allEvents);
     const isSelected = selectedPlayerId === player.id;
     return (
       <button
-        className={`flex items-center gap-2 px-2.5 rounded-xl border transition-all active:scale-[0.97] text-left w-full h-full ${
+        className={`flex items-center gap-2 px-2 rounded-xl border transition-all active:scale-[0.97] text-left w-full h-full ${
           isSelected
             ? 'bg-blue-900 border-blue-500 shadow-lg shadow-blue-900/40'
             : 'bg-slate-800 border-slate-700 hover:border-blue-700'
         }`}
         onClick={() => handlePlayerSelect(player.id)}
       >
-        {/* Jersey number */}
-        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 leading-none ${
+        {/* Jersey */}
+        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 ${
           isSelected ? 'bg-blue-700 border-blue-400 text-white' : 'bg-slate-700 border-slate-600 text-white'
         }`}>
           {player.number}
         </div>
-        {/* Name + live stats */}
+        {/* Name + stats */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-1 min-w-0">
-            <span className="text-white font-black text-sm leading-tight truncate">{player.name}</span>
-            <span className="flex items-baseline gap-0.5 flex-shrink-0 text-[9px] leading-none">
-              <span className="text-green-400 font-bold tabular-nums">{stats.cardPoints}</span>
-              <span className="text-slate-600">·</span>
-              <span className="text-blue-400 font-bold tabular-nums">{stats.cardAttacks}</span>
-              <span className="text-slate-600">·</span>
-              <span className="text-red-400 font-bold tabular-nums">{stats.cardMistakes}</span>
-            </span>
+          <div className="text-white font-bold text-sm leading-tight truncate">{player.name}</div>
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="text-green-400 text-[10px] font-bold tabular-nums">{stats.cardPoints}נק׳</span>
+            <span className="text-slate-600 text-[9px]">|</span>
+            <span className="text-blue-400 text-[10px] font-bold tabular-nums">{stats.cardAttacks}התק׳</span>
+            <span className="text-slate-600 text-[9px]">|</span>
+            <span className="text-red-400 text-[10px] font-bold tabular-nums">{stats.cardMistakes}שג׳</span>
           </div>
-          {player.position && (
-            <div className="text-slate-500 text-[9px] leading-none mt-0.5 truncate">
-              {POSITION_ABBR[player.position] || player.position}
-            </div>
-          )}
         </div>
       </button>
     );
   }
 
-  // ── Court rotation panel ───────────────────────────────────────────────────
-  // Fills all remaining vertical space; uses vmin/vh font clamps so boxes
-  // look good at every iPad size and orientation.
+  // ── Rotation court panel ─────────────────────────────────────────────────────
   function CourtPanel() {
     const rotation = currentSet.rotation;
     const rotIdx   = currentMatch.currentRotationIndex;
@@ -135,28 +125,29 @@ export default function LiveMatchPage() {
 
     return (
       <div className="flex-1 min-h-0 flex flex-col bg-slate-800/70 border-t border-slate-700 overflow-hidden" dir="ltr">
-        {/* Header row */}
-        <div className="flex-shrink-0 flex items-center justify-between px-2.5 py-1.5 border-b border-slate-700/60">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+
+        {/* Header row: rotation controls + sub button */}
+        <div className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-slate-700/60">
+          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold flex-shrink-0">
             {t('rotationLabel')} {rotIdx + 1}
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-1 justify-end">
             <button
               disabled={!canUndo}
               onClick={() => canUndo && dispatch({ type: 'UNDO_ROTATION' })}
-              className={`flex items-center gap-0.5 text-[10px] px-2 py-1 rounded-lg font-medium transition-colors ${
+              className={`flex items-center gap-0.5 text-[10px] px-1.5 py-1 rounded-lg font-medium transition-colors ${
                 canUndo
                   ? 'bg-amber-900/70 border border-amber-700 text-amber-300 active:scale-95'
-                  : 'bg-slate-700/30 border border-slate-700 text-slate-600 cursor-not-allowed'
+                  : 'bg-slate-700/20 border border-slate-700/40 text-slate-600 cursor-not-allowed'
               }`}
             >
-              <RotateCcw size={10} /> {t('undoRotation')}
+              <RotateCcw size={9} /> {t('undoRotation')}
             </button>
             <button
               onClick={() => dispatch({ type: 'MANUAL_ROTATE' })}
-              className="flex items-center gap-0.5 text-[10px] bg-slate-700 hover:bg-blue-800 active:scale-95 px-2 py-1 rounded-lg font-medium border border-slate-600 text-slate-200 transition-colors"
+              className="flex items-center gap-0.5 text-[10px] bg-slate-700 hover:bg-blue-800 active:scale-95 px-1.5 py-1 rounded-lg font-medium border border-slate-600 text-slate-200 transition-colors"
             >
-              <RotateCw size={10} /> {t('rotateBtn')}
+              <RotateCw size={9} /> {t('rotateBtn')}
             </button>
             <button
               onClick={() => setShowRotationSetup(true)}
@@ -164,19 +155,26 @@ export default function LiveMatchPage() {
             >
               ✎
             </button>
+            {/* Sub button lives here */}
+            <button
+              className="flex items-center gap-0.5 text-[10px] bg-blue-800 hover:bg-blue-700 active:scale-95 px-2 py-1 rounded-lg font-semibold border border-blue-600 text-blue-100 transition-colors"
+              onClick={() => dispatch({ type: 'SHOW_SUBSTITUTION' })}
+            >
+              <Shuffle size={9} /> {t('switchPlayer')}
+            </button>
           </div>
         </div>
 
-        {/* Net */}
-        <div className="flex-shrink-0 flex items-center gap-2 px-2 pt-1.5 pb-1">
-          <div className="flex-1 h-px bg-yellow-500/50 rounded" />
-          <span className="text-[9px] font-bold text-yellow-500/70 uppercase tracking-widest">{t('netLabel')}</span>
-          <div className="flex-1 h-px bg-yellow-500/50 rounded" />
+        {/* Net divider */}
+        <div className="flex-shrink-0 flex items-center gap-2 px-2 pt-1 pb-0.5">
+          <div className="flex-1 h-px bg-yellow-500/40 rounded" />
+          <span className="text-[8px] font-bold text-yellow-500/60 uppercase tracking-widest">{t('netLabel')}</span>
+          <div className="flex-1 h-px bg-yellow-500/40 rounded" />
         </div>
 
-        {/* 2 × 3 court grid — fills remaining space */}
+        {/* 2-row × 3-col court grid */}
         <div
-          className="flex-1 min-h-0 grid grid-cols-3 px-2 pb-2 gap-1.5"
+          className="flex-1 min-h-0 grid grid-cols-3 px-1.5 pb-1.5 gap-1"
           style={{ gridTemplateRows: 'repeat(2, 1fr)' }}
         >
           {COURT_LAYOUT.map(([pos]) => {
@@ -185,35 +183,32 @@ export default function LiveMatchPage() {
             return (
               <div
                 key={pos}
-                className={`rounded-xl flex flex-col items-center justify-center overflow-hidden ${
+                className={`rounded-lg flex flex-col items-center justify-center overflow-hidden ${
                   isServer
-                    ? 'bg-green-900/60 border-2 border-green-600/70 shadow-lg shadow-green-900/30'
-                    : 'bg-slate-700/50 border border-slate-600/60'
+                    ? 'bg-green-900/60 border-2 border-green-600/60 shadow-md shadow-green-900/30'
+                    : 'bg-slate-700/50 border border-slate-600/50'
                 }`}
               >
-                {/* Position label */}
-                <div className={`text-[9px] font-bold leading-none mb-0.5 ${isServer ? 'text-green-400' : 'text-slate-500'}`}>
+                <div className={`text-[8px] font-bold leading-none mb-0.5 ${isServer ? 'text-green-400' : 'text-slate-500'}`}>
                   P{pos}{isServer ? ' 🏐' : ''}
                 </div>
                 {player ? (
                   <>
-                    {/* Jersey number — scales with available height */}
                     <div
                       className={`font-black tabular-nums leading-none ${isServer ? 'text-green-200' : 'text-white'}`}
-                      style={{ fontSize: 'clamp(1.1rem, 3.5vh, 2.25rem)' }}
+                      style={{ fontSize: 'clamp(0.9rem, 2.8vh, 1.75rem)' }}
                     >
                       {player.number}
                     </div>
-                    {/* First name */}
                     <div
-                      className={`text-center truncate w-full px-1 mt-0.5 leading-tight font-semibold ${isServer ? 'text-green-300/90' : 'text-slate-300'}`}
-                      style={{ fontSize: 'clamp(0.6rem, 1.6vh, 0.875rem)' }}
+                      className={`text-center truncate w-full px-0.5 leading-tight font-semibold ${isServer ? 'text-green-300/90' : 'text-slate-300'}`}
+                      style={{ fontSize: 'clamp(0.55rem, 1.3vh, 0.8rem)' }}
                     >
                       {player.name.split(' ')[0]}
                     </div>
                   </>
                 ) : (
-                  <div className="text-slate-600" style={{ fontSize: 'clamp(0.75rem, 2vh, 1rem)' }}>—</div>
+                  <div className="text-slate-600 text-sm">—</div>
                 )}
               </div>
             );
@@ -224,74 +219,75 @@ export default function LiveMatchPage() {
   }
 
   return (
-    <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">
+    <div className="bg-slate-900 flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
 
-      {/* ── Zone 1: Score header (with serve indicator) ───────────────────── */}
-      <ScoreHeader onShowSubstitution={() => dispatch({ type: 'SHOW_SUBSTITUTION' })} />
+      {/* Zone 1: Score header + serve indicator */}
+      <ScoreHeader />
 
-      {/* ── Control bar: undo · end-set · end-match · mode toggle ─────────── */}
-      <div className="flex-shrink-0 bg-slate-900/95 border-b border-slate-700/60 flex items-center px-2 py-1 gap-1.5">
+      {/* Control bar */}
+      <div className="flex-shrink-0 bg-slate-900/95 border-b border-slate-700/60 flex items-center px-2 py-1.5 gap-1.5">
         {!showEndSetConfirm ? (
           <>
-            {/* Undo button */}
+            {/* Undo — compact, same weight as siblings */}
             <button
               disabled={!lastEvent}
               onClick={() => lastEvent && dispatch({ type: 'UNDO_LAST_EVENT' })}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-semibold flex-1 min-w-0 transition-all ${
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg border text-xs font-medium flex-1 min-w-0 transition-all ${
                 !lastEvent
-                  ? 'bg-slate-800/50 border-slate-700/40 text-slate-600 cursor-not-allowed'
+                  ? 'bg-slate-800/40 border-slate-700/30 text-slate-600 cursor-not-allowed'
                   : undoFlash
                     ? 'bg-amber-900/60 border-amber-700 text-amber-300'
                     : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-amber-800 hover:text-amber-400'
               }`}
             >
-              <RotateCcw size={12} className="flex-shrink-0" />
-              <span className="flex-shrink-0">{t('undoAction')}</span>
+              <RotateCcw size={11} className="flex-shrink-0" />
+              <span className="flex-shrink-0 text-[11px]">{t('undoAction')}</span>
               {lastEvent && (
-                <span className={`text-[10px] truncate ml-0.5 ${undoFlash ? 'text-amber-200' : 'text-slate-500'}`}>
+                <span className={`text-[9px] truncate ml-0.5 ${undoFlash ? 'text-amber-200' : 'text-slate-500'}`}>
                   {lastEventConf ? `${lastEventConf.emoji} ${lastEventLabel}` : t('manualScore')}
                 </span>
               )}
             </button>
 
-            {/* End Set */}
+            {/* End Set — prominent */}
             <button
-              className="flex-shrink-0 py-1.5 px-2.5 rounded-lg border border-orange-800/70 text-orange-500 hover:bg-orange-900/20 font-semibold text-[11px] transition-colors"
+              className="flex-shrink-0 py-1.5 px-3 rounded-lg bg-orange-700 hover:bg-orange-600 active:scale-95 text-white font-bold text-xs transition-all"
               onClick={() => setShowEndSetConfirm(true)}
             >
               {t('endSet')} {currentMatch.currentSetIndex + 1}
             </button>
 
-            {/* End Match */}
+            {/* End Match — prominent with label */}
             <button
-              className="flex-shrink-0 py-1.5 px-2 rounded-lg border border-red-900/60 text-red-600 hover:bg-red-900/20 font-semibold text-[11px] transition-colors flex items-center gap-0.5"
+              className="flex-shrink-0 py-1.5 px-2.5 rounded-lg bg-red-900/80 hover:bg-red-800 active:scale-95 border border-red-700/60 text-red-200 font-bold text-xs transition-all flex items-center gap-1"
               onClick={() => { if (confirm(t('endMatchConfirm'))) dispatch({ type: 'END_MATCH' }); }}
             >
-              <StopCircle size={11} />
+              <StopCircle size={12} />
             </button>
 
-            {/* Mode toggle — tiny G / C */}
-            <div className="flex-shrink-0 flex items-center gap-0.5 border border-slate-700 rounded-lg overflow-hidden">
+            {/* Mode toggle with labels */}
+            <div className="flex-shrink-0 flex items-center border border-slate-700 rounded-lg overflow-hidden">
               <button
-                className={`px-2 py-1.5 text-[10px] font-bold transition-colors ${
+                className={`px-2 py-1.5 text-[10px] font-bold transition-colors leading-none ${
                   appMode === 'game' ? 'bg-blue-700 text-white' : 'text-slate-500 hover:text-slate-300'
                 }`}
                 onClick={() => dispatch({ type: 'SET_APP_MODE', mode: 'game' })}
+                title={t('gameMode')}
               >
-                G
+                🎮
               </button>
               <button
-                className={`px-2 py-1.5 text-[10px] font-bold transition-colors ${
+                className={`px-2 py-1.5 text-[10px] font-bold transition-colors leading-none ${
                   appMode === 'coach' ? 'bg-purple-700 text-white' : 'text-slate-500 hover:text-slate-300'
                 }`}
                 onClick={() => dispatch({ type: 'SET_APP_MODE', mode: 'coach' })}
+                title={t('coachMode')}
               >
-                C
+                📋
               </button>
             </div>
           </>
         ) : (
-          /* End-set confirmation replaces the bar */
           <>
             <span className="text-orange-400 text-xs font-semibold flex-1 truncate">
               {t('endSet')} {currentMatch.currentSetIndex + 1}? ({currentSet.homeScore}–{currentSet.opponentScore})
@@ -312,49 +308,48 @@ export default function LiveMatchPage() {
         )}
       </div>
 
-      {/* ── Middle content: players (38%) + rotation (62%) ───────────────────── */}
+      {/* Middle content: player grid (35%) + court rotation (65%) */}
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 
-        {/* Zone 2: 6 court players — fixed 38% slice, 2×3 grid */}
+        {/* Player grid — fixed slice, 2×3 */}
         <div
-          className="flex-shrink-0 p-1.5 grid grid-cols-2 gap-1 overflow-hidden"
-          style={{ flex: '0 0 38%', gridTemplateRows: 'repeat(3, 1fr)' }}
+          className="flex-shrink-0 p-1 grid grid-cols-2 gap-1 overflow-hidden"
+          style={{ flex: '0 0 35%', gridTemplateRows: 'repeat(3, 1fr)' }}
         >
           {courtPlayers.map(p => <PlayerCell key={p.id} player={p} />)}
-          {/* Dashed placeholders when rotation not yet configured */}
           {Array.from({ length: Math.max(0, 6 - courtPlayers.length) }).map((_, i) => (
-            <div key={`slot-${i}`} className="rounded-xl border border-slate-700/30 border-dashed bg-slate-800/20" />
+            <div key={`slot-${i}`} className="rounded-xl border border-slate-700/20 border-dashed bg-slate-800/10" />
           ))}
         </div>
 
-        {/* Zone 3: Court rotation — flex-1 takes remaining 62% */}
+        {/* Court rotation — fills remaining space */}
         <CourtPanel />
 
       </div>
 
-      {/* ── Bottom nav — flex-shrink-0 guarantees it's always visible ─────── */}
-      <div className="flex border-t border-slate-700 bg-slate-900 flex-shrink-0 gap-2 p-2">
+      {/* Bottom nav — always visible */}
+      <div className="flex border-t border-slate-700 bg-slate-900 flex-shrink-0 gap-1.5 px-2 py-1.5">
         <button
-          className="btn-3d btn-3d-nav flex-1 py-3 gap-1.5 text-sm font-semibold"
+          className="btn-3d btn-3d-nav flex-1 py-2.5 gap-1 text-sm font-semibold"
           onClick={() => navigate(VIEWS.HOME)}
         >
-          <ArrowLeft size={18} /> {t('home')}
+          <ArrowLeft size={16} /> {t('home')}
         </button>
         <button
-          className="btn-3d btn-3d-blue flex-1 py-3 gap-1.5 text-sm font-semibold"
+          className="btn-3d btn-3d-blue flex-1 py-2.5 gap-1 text-sm font-semibold"
           onClick={() => navigate(VIEWS.STATS)}
         >
-          <BarChart2 size={18} /> {t('stats')}
+          <BarChart2 size={16} /> {t('stats')}
         </button>
         <button
-          className="btn-3d btn-3d-nav flex-1 py-3 gap-1.5 text-sm font-semibold"
+          className="btn-3d btn-3d-nav flex-1 py-2.5 gap-1 text-sm font-semibold"
           onClick={() => dispatch({ type: 'SHOW_HEATMAP' })}
         >
-          <Layers size={18} /> {t('heatmap')}
+          <Layers size={16} /> {t('heatmap')}
         </button>
       </div>
 
-      {/* ── Modals ───────────────────────────────────────────────────────────── */}
+      {/* Modals */}
       {selectedPlayerId && (appMode === 'game' ? <GameModeButtons /> : <EventButtons />)}
       {showSubstitution && <SubstitutionModal onClose={() => dispatch({ type: 'HIDE_SUBSTITUTION' })} />}
       {showCourtDraw && <CourtDrawModal />}

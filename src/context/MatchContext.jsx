@@ -21,6 +21,7 @@ function createEmptySet(setNumber, startServingTeam = 'home') {
     rotation: ['', '', '', '', '', ''],
     startingRotation: ['', '', '', '', '', ''],
     startServingTeam,
+    serveConfirmed: false,
     substitutions: [],
     attackDrawings: [],
     blockingDrawings: [],
@@ -412,7 +413,7 @@ function reducer(state, action) {
       const { servingTeam } = action;
       const match = state.currentMatch;
       const setIdx = match.currentSetIndex;
-      const updatedSet = { ...match.sets[setIdx], startServingTeam: servingTeam };
+      const updatedSet = { ...match.sets[setIdx], startServingTeam: servingTeam, serveConfirmed: true };
       const updatedSets = [...match.sets];
       updatedSets[setIdx] = updatedSet;
       return {
@@ -594,7 +595,10 @@ export function MatchProvider({ children }) {
       prevTeamsRef.current   = savedTeams;
       const setIdx = currentMatch?.currentSetIndex ?? 0;
       const currentSetEvents = currentMatch?.sets?.[setIdx]?.events ?? [];
-      const needsServeSetup = currentMatch?.status === 'active' && currentSetEvents.length === 0;
+      const serveAlreadyConfirmed = currentMatch?.sets?.[setIdx]?.serveConfirmed === true;
+      const needsServeSetup = currentMatch?.status === 'active'
+        && currentSetEvents.length === 0
+        && !serveAlreadyConfirmed;
       dispatch({ type: 'HYDRATE', currentMatch, matches, savedTeams, settings, needsServeSetup });
       if (currentMatch?.status === 'completed') {
         dispatch({ type: 'SET_VIEW', payload: VIEWS.STATS });

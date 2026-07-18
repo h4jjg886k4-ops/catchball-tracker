@@ -123,6 +123,7 @@ export const translations = {
   changeServeTo:       { en: 'Change serve to {team}?', he: 'להעביר הגשה ל{team}?' },
   yes:                 { en: 'Yes',            he: 'כן' },
   sub:                 { en: 'Sub',            he: 'חילוף' },
+  switchPlayer:        { en: 'Switch Player',  he: 'החלף שחקן' },
   tapToUndo:           { en: 'Tap to undo', he: 'לחץ לביטול' },
   noEventsYet:         { en: 'No events yet',   he: 'אין אירועים' },
   manualScore:         { en: 'Manual score +1', he: 'ניקוד ידני +1' },
