@@ -12,6 +12,7 @@ export default function ScoreHeader({ onShowSubstitution }) {
   const [flashHome, setFlashHome] = useState(false);
   const [flashOpp,  setFlashOpp]  = useState(false);
   const [undoFlash, setUndoFlash] = useState(false);
+  const [showChangeServe, setShowChangeServe] = useState(false);
   const prevHomeRef = useRef(0);
   const prevOppRef  = useRef(0);
 
@@ -48,8 +49,18 @@ export default function ScoreHeader({ onShowSubstitution }) {
 
   const setsWon  = currentMatch.sets.filter(s => s.winner === 'home').length;
   const setsLost = currentMatch.sets.filter(s => s.winner === 'opponent').length;
+  const servingTeam = currentMatch.servingTeam;
+  const isHomeServing = servingTeam === 'home';
+  const servingTeamName  = isHomeServing ? currentMatch.homeTeam.name  : currentMatch.opponentTeam.name;
+  const otherTeamName    = isHomeServing ? currentMatch.opponentTeam.name : currentMatch.homeTeam.name;
+  const otherServingTeam = isHomeServing ? 'opponent' : 'home';
 
   function handleUndo() { dispatch({ type: 'UNDO_LAST_EVENT' }); }
+
+  function confirmChangeServe() {
+    dispatch({ type: 'SET_SERVE_TEAM', servingTeam: otherServingTeam });
+    setShowChangeServe(false);
+  }
 
   return (
     <div className="bg-slate-900 border-b border-slate-700 select-none flex-shrink-0">
@@ -65,63 +76,67 @@ export default function ScoreHeader({ onShowSubstitution }) {
         ))}
       </div>
 
-      {/* ── Electronic scoreboard panel ────────────────────────────────── */}
+      {/* ── Scoreboard panel ──────────────────────────────────────────────── */}
       <div
         className="mx-3 mb-2 rounded-2xl border border-slate-700/60 overflow-hidden"
         style={{ background: 'linear-gradient(160deg, #0d1117 0%, #080d18 100%)' }}
       >
-        {/* Team names + sets won + serving indicator */}
-        <div className="flex items-start justify-between px-4 pt-3 pb-1">
-          {/* Home team */}
+        {/* Team names row */}
+        <div className="flex items-center justify-between px-4 pt-3 pb-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1">
-              {currentMatch.servingTeam === 'home' && (
-                <span className="text-base leading-none flex-shrink-0">🏐</span>
-              )}
-              <div className="text-white font-black text-sm uppercase tracking-wide truncate">
-                {currentMatch.homeTeam.name}
-              </div>
+            <div className={`font-black text-sm uppercase tracking-wide truncate transition-colors ${
+              isHomeServing ? 'text-green-200' : 'text-slate-400'
+            }`}>
+              {currentMatch.homeTeam.name}
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <div className="text-green-500 text-[11px] font-bold">{setsWon} {t('setsLabel')}</div>
-              {currentMatch.servingTeam === 'home' && (
-                <span className="text-[10px] font-bold text-green-300 bg-green-900/70 px-1.5 py-0.5 rounded-full leading-none">
-                  {t('serving')}
-                </span>
-              )}
-            </div>
+            <div className="text-green-600 text-[11px] font-bold mt-0.5">{setsWon} {t('setsLabel')}</div>
           </div>
-
-          {/* Center: set number only */}
-          <div className="flex flex-col items-center px-3 flex-shrink-0 pt-0.5">
+          <div className="px-3 flex-shrink-0 text-center">
             <div className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">
               {t('setLabel')} {currentMatch.currentSetIndex + 1}
             </div>
           </div>
-
-          {/* Opponent team */}
           <div className="flex-1 min-w-0 text-right">
-            <div className="flex items-center justify-end gap-1">
-              <div className="text-white font-black text-sm uppercase tracking-wide truncate">
-                {currentMatch.opponentTeam.name}
-              </div>
-              {currentMatch.servingTeam === 'opponent' && (
-                <span className="text-base leading-none flex-shrink-0">🏐</span>
-              )}
+            <div className={`font-black text-sm uppercase tracking-wide truncate transition-colors ${
+              !isHomeServing ? 'text-red-200' : 'text-slate-400'
+            }`}>
+              {currentMatch.opponentTeam.name}
             </div>
-            <div className="flex items-center justify-end gap-1.5 mt-0.5">
-              {currentMatch.servingTeam === 'opponent' && (
-                <span className="text-[10px] font-bold text-red-300 bg-red-900/70 px-1.5 py-0.5 rounded-full leading-none">
-                  {t('serving')}
-                </span>
-              )}
-              <div className="text-red-500 text-[11px] font-bold">{setsLost} {t('setsLabel')}</div>
-            </div>
+            <div className="text-red-600 text-[11px] font-bold mt-0.5">{setsLost} {t('setsLabel')}</div>
           </div>
         </div>
 
+        {/* ── Prominent serving indicator ──────────────────────────────── */}
+        <div className={`mx-3 mb-3 rounded-xl flex items-center justify-between px-3 py-2.5 ${
+          isHomeServing
+            ? 'bg-green-900/70 border border-green-700/60'
+            : 'bg-red-900/60 border border-red-700/60'
+        }`}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-2xl leading-none flex-shrink-0 animate-pulse">🏐</span>
+            <div className="min-w-0">
+              <div className={`font-black text-base leading-tight truncate ${
+                isHomeServing ? 'text-green-100' : 'text-red-100'
+              }`}>
+                {servingTeamName}
+              </div>
+              <div className={`text-[10px] font-bold uppercase tracking-widest ${
+                isHomeServing ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {t('serving')}
+              </div>
+            </div>
+          </div>
+          <button
+            className="flex-shrink-0 ml-2 border border-slate-500/60 rounded-lg px-2.5 py-1.5 text-slate-400 text-[10px] font-semibold uppercase tracking-wide hover:border-slate-300 hover:text-slate-200 active:bg-slate-700/50 transition-all"
+            onClick={() => setShowChangeServe(true)}
+          >
+            {t('changeServe')}
+          </button>
+        </div>
+
         {/* Score digits + +/- buttons */}
-        <div className="flex items-center px-3 pb-4 pt-1">
+        <div className="flex items-center px-3 pb-4 pt-0">
 
           {/* Home score */}
           <div className="flex-1 flex flex-col items-center">
@@ -224,6 +239,39 @@ export default function ScoreHeader({ onShowSubstitution }) {
           </span>
         )}
       </button>
+
+      {/* ── Change serve confirmation modal ───────────────────────────────── */}
+      {showChangeServe && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          onClick={() => setShowChangeServe(false)}
+        >
+          <div
+            className="bg-slate-800 rounded-2xl w-full max-w-xs mx-4 p-5 border border-slate-600 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="text-3xl text-center mb-3">🔄</div>
+            <p className="text-white font-bold text-base text-center mb-5 leading-snug">
+              {t('changeServeTo', { team: otherTeamName })}
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-3 rounded-xl bg-amber-700 hover:bg-amber-600 active:scale-95 text-white font-black text-base transition-all"
+                onClick={confirmChangeServe}
+              >
+                {t('yes')}
+              </button>
+              <button
+                className="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 text-white font-bold text-base transition-all"
+                onClick={() => setShowChangeServe(false)}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
