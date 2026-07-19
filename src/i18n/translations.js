@@ -327,6 +327,11 @@ export const translations = {
   contributionScore:    { en: 'Score',               he: 'ניקוד' },
   matchScoreBanner:     { en: 'Match Score',          he: 'תוצאת משחק' },
   momentumRun:          { en: '{n} in a row',         he: '{n} ברצף' },
+  errorBreakdown:       { en: 'Error Breakdown',      he: 'פירוט שגיאות' },
+  totalErrorsCount:     { en: 'Total',                he: 'סה״כ' },
+  errorCount:           { en: 'Errors',               he: 'שגיאות' },
+  blockMistakeNoPts:    { en: 'Blocking mistakes do not directly give the opponent a point', he: 'טעויות חסימה לא מעניקות ישירות נקודה ליריב' },
+  errorInsightTpl:      { en: '{type} — {count}× ({pct}% of all errors)', he: '{type} — {count} פעמים ({pct}% מכלל השגיאות)' },
 
   // ── Serve setup ──────────────────────────────────────────────────────────
   whoServesFirst:      { en: 'Who serves first?',      he: 'מי מגיש ראשון?' },

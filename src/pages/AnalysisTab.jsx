@@ -6,18 +6,27 @@ import {
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  LineChart, Line, ReferenceLine, PieChart, Pie, Cell, ResponsiveContainer, LabelList,
+  LineChart, Line, ReferenceLine, Cell, ResponsiveContainer, LabelList,
 } from 'recharts';
 import {
   calcAdvancedPlayerStats, calcAdvancedTeamStats,
   calcMomentum, calcClutchStats, calcErrorByGameState,
-  buildScoreTimeline, calcEventDistribution, fetchAIInsights,
+  buildScoreTimeline, fetchAIInsights,
   calcServeEfficiency, calcContributionScore, detectMomentumShifts,
 } from '../utils/analysisStats';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
 
-const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+const ERROR_RED_RAMP = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444', '#f87171'];
+
+const ERROR_TYPE_DEFS = [
+  { type: 'serve_error',    labelKey: 'serveError',    directPts: true  },
+  { type: 'attack_out',     labelKey: 'attackOut',     directPts: true  },
+  { type: 'attack_blocked', labelKey: 'attackBlocked', directPts: true  },
+  { type: 'defense_error',  labelKey: 'defenseError',  directPts: true  },
+  { type: 'set_error',      labelKey: 'setError',      directPts: true  },
+  { type: 'block_mistake',  labelKey: 'blockMistake',  directPts: false },
+];
 
 const TOOLTIP_STYLE = {
   background: '#1e293b',
@@ -630,37 +639,85 @@ function TeamStatistics({ teamStats, t }) {
   );
 }
 
-// ── Event Distribution Pie ────────────────────────────────────────────────────
-function EventDistributionChart({ allEvents, t }) {
-  const data = useMemo(() => calcEventDistribution(allEvents), [allEvents]);
+// ── Error Breakdown Chart ─────────────────────────────────────────────────────
+function ErrorBreakdownChart({ allEvents, t }) {
+  const data = useMemo(() => {
+    const counts = ERROR_TYPE_DEFS.map(def => ({
+      ...def,
+      label: t(def.labelKey),
+      count: allEvents.filter(e => e.type === def.type).length,
+    }));
+    const total = counts.reduce((s, d) => s + d.count, 0);
+    return counts
+      .map(d => ({
+        ...d,
+        pct: total > 0 ? Math.round(d.count / total * 100) : 0,
+        countLabel: `${d.count} (${total > 0 ? Math.round(d.count / total * 100) : 0}%)`,
+      }))
+      .filter(d => d.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [allEvents, t]);
+
   if (!data.length) return null;
 
-  const RADIAN = Math.PI / 180;
-  const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
-    if (percent < 0.05) return null;
-    const radius = innerRadius + (outerRadius - innerRadius) * 1.35;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-    return (
-      <text x={x} y={y} fill="#94a3b8" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={10}>
-        {name} ({(percent * 100).toFixed(0)}%)
-      </text>
-    );
-  };
+  const totalErrors = data.reduce((s, d) => s + d.count, 0);
+  const top = data[0];
+
+  const chartData = data.map(d => ({ name: d.label, count: d.count, countLabel: d.countLabel, pct: d.pct, directPts: d.directPts }));
+  const h = Math.max(data.length * 48 + 20, 100);
 
   return (
     <Card>
-      <SectionHeader title={t('eventDistribution')} />
-      <div className="p-2">
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} labelLine={false} label={renderLabel}>
-              {data.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-            </Pie>
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
-          </PieChart>
+      <SectionHeader
+        title={t('errorBreakdown')}
+        icon={AlertTriangle}
+        action={
+          <span className="text-red-400 text-xs font-bold tabular-nums">
+            {t('totalErrorsCount')}: {totalErrors}
+          </span>
+        }
+      />
+      <div className="px-3 pt-3 pb-1">
+        <ResponsiveContainer width="100%" height={h}>
+          <BarChart layout="vertical" data={chartData} margin={{ left: 4, right: 72, top: 2, bottom: 2 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
+            <XAxis type="number" allowDecimals={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              tick={{ fill: '#fca5a5', fontSize: 11 }}
+              width={108}
+            />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(value, _, props) => [
+                `${value} (${props.payload.pct}%)${props.payload.directPts ? '' : ' *'}`,
+                t('errorsLabel'),
+              ]}
+            />
+            <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+              {chartData.map((_, i) => (
+                <Cell key={i} fill={ERROR_RED_RAMP[Math.min(i, ERROR_RED_RAMP.length - 1)]} />
+              ))}
+              <LabelList
+                dataKey="countLabel"
+                position="right"
+                style={{ fill: '#fca5a5', fontSize: 11, fontWeight: 600 }}
+              />
+            </Bar>
+          </BarChart>
         </ResponsiveContainer>
       </div>
+      {!data.some(d => !d.directPts && d.count > 0) ? null : (
+        <div className="px-4 pb-1 text-slate-600 text-[10px]">* {t('blockMistakeNoPts')}</div>
+      )}
+      {top && (
+        <div className="mx-4 mb-4 mt-2 px-3 py-2.5 bg-red-950/40 border border-red-800/40 rounded-xl">
+          <p className="text-red-300 text-xs leading-relaxed">
+            {t('errorInsightTpl', { type: top.label, count: top.count, pct: top.pct })}
+          </p>
+        </div>
+      )}
     </Card>
   );
 }
@@ -990,8 +1047,8 @@ export default function AnalysisTab({ currentMatch, t }) {
       {/* 10. Team Statistics */}
       <TeamStatistics teamStats={teamStats} t={t} />
 
-      {/* 11. Event Distribution */}
-      <EventDistributionChart allEvents={filteredEvents} t={t} />
+      {/* 11. Error Breakdown */}
+      <ErrorBreakdownChart allEvents={filteredEvents} t={t} />
 
       {/* 12. Detailed Player Stats */}
       <DetailedPlayerStats playerAdvancedList={playerAdvancedList} players={players} t={t} />
