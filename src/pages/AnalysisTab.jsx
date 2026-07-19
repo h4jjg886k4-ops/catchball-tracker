@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMatch } from '../context/MatchContext';
 import {
   Brain, TrendingUp, AlertTriangle, Award, ChevronDown, ChevronUp,
-  RefreshCw, Loader2, Zap,
+  RefreshCw, Loader2, Zap, Sparkles,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -129,25 +130,34 @@ function SummaryCards({ currentMatch, teamStats, playerAdvancedMap, players, mom
 }
 
 // ── AI Insights ───────────────────────────────────────────────────────────────
-function AIInsightsSection({ insights, loading, error, noKey, onRefresh, t }) {
+function AIInsightsSection({ insights, loading, error, noKey, generatedAt, onGenerate, t }) {
+  const timeLabel = generatedAt
+    ? new Date(generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    : null;
+
   return (
     <Card>
       <SectionHeader
         title={t('aiInsights')}
         icon={Brain}
         action={
-          !noKey && (
+          !noKey && insights && !loading && (
             <button
-              onClick={onRefresh}
-              disabled={loading}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-slate-300 transition-colors disabled:opacity-50"
+              onClick={onGenerate}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-slate-300 transition-colors"
             >
-              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              {t('refreshInsights')}
+              <RefreshCw size={11} />
+              {t('regenerateInsights')}
             </button>
           )
         }
       />
+
+      {timeLabel && (
+        <div className="px-4 pt-2 pb-0 text-slate-500 text-[10px]">
+          {t('insightsGeneratedAt')} {timeLabel}
+        </div>
+      )}
 
       <div className="p-4 space-y-2">
         {noKey && (
@@ -163,6 +173,18 @@ function AIInsightsSection({ insights, loading, error, noKey, onRefresh, t }) {
           <div className="bg-red-950/50 border border-red-700/60 rounded-xl p-4 space-y-2">
             <div className="text-red-400 text-sm font-semibold">{t('aiInsightsError')}</div>
             <pre className="text-red-300 text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed">{error}</pre>
+          </div>
+        )}
+        {!insights && !loading && !error && !noKey && (
+          <div className="flex flex-col items-center gap-3 py-5">
+            <p className="text-slate-500 text-sm">{t('noInsightsYet')}</p>
+            <button
+              onClick={onGenerate}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 active:scale-95 text-white font-semibold text-sm transition-all"
+            >
+              <Sparkles size={14} />
+              {t('generateInsights')}
+            </button>
           </div>
         )}
         {insights && insights.map((insight, i) => (
@@ -723,6 +745,7 @@ function EventLogSection({ currentMatch, players, t }) {
 
 // ── Main AnalysisTab component ────────────────────────────────────────────────
 export default function AnalysisTab({ currentMatch, t }) {
+  const { dispatch } = useMatch();
   const players = currentMatch.homeTeam.players;
 
   // ── Set filter ──────────────────────────────────────────────────────────────
@@ -766,16 +789,28 @@ export default function AnalysisTab({ currentMatch, t }) {
   }, [players, filteredEvents]);
 
   // ── AI insights ─────────────────────────────────────────────────────────────
-  const [insights, setInsights]   = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError]     = useState(null);   // null or error string
-  const [aiNoKey, setAiNoKey]     = useState(false);
+  const setKey = selectedSetIdx === null ? 'all' : String(selectedSetIdx);
 
-  const loadInsights = useCallback(async () => {
+  const [insights, setInsights]       = useState(null);
+  const [aiGeneratedAt, setAiGeneratedAt] = useState(null);
+  const [aiLoading, setAiLoading]     = useState(false);
+  const [aiError, setAiError]         = useState(null);
+  const [aiNoKey, setAiNoKey]         = useState(false);
+
+  // Sync from cache whenever setKey or the cached data changes
+  useEffect(() => {
+    const cached = currentMatch.aiInsightsBySet?.[setKey] ?? null;
+    setInsights(cached);
+    setAiGeneratedAt(cached ? (currentMatch.aiInsightsGeneratedAt?.[setKey] ?? null) : null);
+    setAiError(null);
+    setAiNoKey(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setKey, currentMatch.aiInsightsBySet]);
+
+  const generateInsights = useCallback(async () => {
     setAiLoading(true);
     setAiError(null);
     setAiNoKey(false);
-    setInsights(null);
     try {
       const result = await fetchAIInsights({
         homeTeam:     currentMatch.homeTeam.name,
@@ -789,7 +824,7 @@ export default function AnalysisTab({ currentMatch, t }) {
         clutchStats: players.map(p => ({ name: p.name, ...clutchMap[p.id] })),
         errorStats:  players.map(p => ({ name: p.name, ...errorStateMap[p.id] })),
       });
-      setInsights(result);
+      dispatch({ type: 'SAVE_AI_INSIGHTS', setKey, insights: result, generatedAt: Date.now() });
     } catch (err) {
       if (err.message === 'NO_KEY') {
         setAiNoKey(true);
@@ -800,12 +835,7 @@ export default function AnalysisTab({ currentMatch, t }) {
     } finally {
       setAiLoading(false);
     }
-  }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, players, selectedSetIdx]);
-
-  // Auto-load on mount and whenever the filter changes
-  useEffect(() => {
-    loadInsights();
-  }, [loadInsights]);
+  }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, players, setKey, dispatch]);
 
   const multiSet = currentMatch.sets.length > 1;
 
@@ -853,7 +883,8 @@ export default function AnalysisTab({ currentMatch, t }) {
         loading={aiLoading}
         error={aiError}
         noKey={aiNoKey}
-        onRefresh={loadInsights}
+        generatedAt={aiGeneratedAt}
+        onGenerate={generateInsights}
         t={t}
       />
 

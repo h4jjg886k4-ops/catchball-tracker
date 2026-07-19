@@ -46,6 +46,8 @@ function createEmptyMatch(homeTeam, opponentTeam) {
     currentRotationIndex: 0,
     rotationVersion: 0,
     rotationHistory: [],
+    aiInsightsBySet: {},     // { "all": [...], "0": [...], "1": [...] }
+    aiInsightsGeneratedAt: {}, // { "all": ts, "0": ts, "1": ts }
   };
 }
 
@@ -293,6 +295,23 @@ function reducer(state, action) {
 
     case 'SKIP_ATTACK_DRAWING':
       return { ...state, showCourtDraw: false, pendingCourtDraw: null };
+
+    // ── AI insights cache ──────────────────────────────────────────────────
+    case 'SAVE_AI_INSIGHTS': {
+      const { setKey, insights, generatedAt } = action;
+      const match = state.currentMatch;
+      if (!match) return state;
+      const updated = {
+        ...match,
+        aiInsightsBySet:      { ...(match.aiInsightsBySet      || {}), [setKey]: insights },
+        aiInsightsGeneratedAt:{ ...(match.aiInsightsGeneratedAt|| {}), [setKey]: generatedAt },
+      };
+      return {
+        ...state,
+        currentMatch: updated,
+        matches: upsertMatch(updated, state.matches),
+      };
+    }
 
     // ── Score adjustment ───────────────────────────────────────────────────
     case 'ADJUST_SCORE': {
