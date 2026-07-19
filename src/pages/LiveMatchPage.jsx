@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw, Shuffle } from 'lucide-react';
+import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw, Shuffle, List } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
-import { VIEWS, EVENT_TYPES as T, EVENT_CONFIG } from '../utils/constants';
+import { VIEWS, EVENT_TYPES as T, EVENT_CONFIG, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { calcPlayerStats } from '../utils/stats';
 import ScoreHeader from '../components/ui/ScoreHeader';
@@ -19,7 +19,7 @@ const COURT_LAYOUT = [
   [5, 1, 0], [6, 1, 1], [1, 1, 2],
 ];
 
-// ── Reusable inline button primitives ────────────────────────────────────────
+// ── Inline button primitives ──────────────────────────────────────────────────
 function BigBtn({ emoji, label, score, color = 'slate', onClick }) {
   const cls = {
     green:  'bg-green-800/80 border-green-600 text-green-100 active:bg-green-700',
@@ -72,8 +72,12 @@ export default function LiveMatchPage() {
   } = state;
   const [showRotationSetup, setShowRotationSetup] = useState(false);
   const [showEndSetConfirm, setShowEndSetConfirm] = useState(false);
+  const [showEventLog, setShowEventLog] = useState(false);
   const [undoFlash, setUndoFlash] = useState(false);
-  // Flow stack — each entry is a named screen step; back pops the stack
+  // Flash on the last-event bar — increments per logged event, resets after 1s
+  const [eventFlashCount, setEventFlashCount] = useState(0);
+  const [eventFlash, setEventFlash] = useState(false);
+  // Flow stack — named steps for nested sub-menus; back pops; recording clears
   const [flowStack, setFlowStack] = useState([]);
   const currentFlow = flowStack[flowStack.length - 1] ?? null;
   const pushFlow  = (step) => setFlowStack(s => [...s, step]);
@@ -88,6 +92,14 @@ export default function LiveMatchPage() {
       return () => clearTimeout(timer);
     }
   }, [lastUndoneEvent]);
+
+  // Flash the last-event bar for 1 s after each recorded event
+  useEffect(() => {
+    if (eventFlashCount === 0) return;
+    setEventFlash(true);
+    const timer = setTimeout(() => setEventFlash(false), 1000);
+    return () => clearTimeout(timer);
+  }, [eventFlashCount]);
 
   if (!currentMatch) {
     return (
@@ -121,6 +133,7 @@ export default function LiveMatchPage() {
       event: { id: uuidv4(), type, playerId: selectedPlayerId, timestamp: Date.now(), ...extra },
     });
     clearFlow();
+    setEventFlashCount(c => c + 1); // triggers flash on last-event bar
   }
 
   async function handleEndSet() {
@@ -142,6 +155,99 @@ export default function LiveMatchPage() {
   function handleRotationSetupClose() {
     setShowRotationSetup(false);
     if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
+  }
+
+  // ── Event log panel ───────────────────────────────────────────────────────────
+  function EventLogPanel() {
+    const reversed = [...allEvents].reverse();
+    return (
+      <>
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-40 bg-black/60"
+          onClick={() => setShowEventLog(false)}
+        />
+        {/* Slide-up panel */}
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-slate-900 border-t-2 border-slate-700 rounded-t-2xl flex flex-col" style={{ maxHeight: '75dvh' }}>
+          {/* Header */}
+          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-700">
+            <div className="flex items-center gap-2">
+              <List size={14} className="text-blue-400" />
+              <span className="text-white font-bold text-sm">{t('eventLog')}</span>
+              <span className="text-slate-500 text-xs">({allEvents.length})</span>
+            </div>
+            <button
+              className="text-slate-400 hover:text-slate-200 text-sm font-semibold px-2 py-1 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors"
+              onClick={() => setShowEventLog(false)}
+            >
+              {t('closeBtn')}
+            </button>
+          </div>
+
+          {/* Event list */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {reversed.length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-slate-600 text-sm">
+                {t('noEventsRecorded')}
+              </div>
+            ) : (
+              reversed.map((ev, idx) => {
+                const isLast = idx === 0;
+                const evPlayer = players.find(p => p.id === ev.playerId);
+                const conf  = EVENT_CONFIG.find(c => c.type === ev.type);
+                const label = conf && EVENT_TYPE_I18N_KEY[conf.type]
+                  ? t(EVENT_TYPE_I18N_KEY[conf.type]) : conf?.label ?? ev.type;
+                const isHome = HOME_SCORE_EVENTS.has(ev.type);
+                const isOpp  = OPPONENT_SCORE_EVENTS.has(ev.type);
+                const scoreColor = isHome ? 'text-green-400' : isOpp ? 'text-red-400' : 'text-slate-600';
+                const scoreMark  = isHome ? '+1' : isOpp ? '-1' : '•';
+                const timeStr = new Date(ev.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+                });
+
+                return (
+                  <div
+                    key={ev.id ?? idx}
+                    className={`flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/80 ${isLast ? 'bg-slate-800/40' : ''}`}
+                  >
+                    {/* Time */}
+                    <span className="text-[10px] text-slate-600 font-mono flex-shrink-0 w-14">{timeStr}</span>
+                    {/* Emoji */}
+                    <span className="text-base flex-shrink-0">{conf?.emoji ?? '•'}</span>
+                    {/* Label + player */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-semibold text-slate-200 truncate">{label}</div>
+                      {evPlayer && (
+                        <div className="text-[10px] text-slate-500 truncate">
+                          #{evPlayer.number} {evPlayer.name}
+                        </div>
+                      )}
+                    </div>
+                    {/* Score badge */}
+                    <span className={`text-[10px] font-black flex-shrink-0 w-5 text-right ${scoreColor}`}>
+                      {scoreMark}
+                    </span>
+                    {/* Undo — only for the most recent event */}
+                    {isLast && (
+                      <button
+                        className="flex-shrink-0 flex items-center gap-0.5 px-2 py-1 rounded-lg border border-amber-700/60 bg-amber-900/30 text-amber-400 text-[10px] font-semibold hover:bg-amber-900/60 transition-colors active:scale-95"
+                        onClick={() => {
+                          dispatch({ type: 'UNDO_LAST_EVENT' });
+                          setShowEventLog(false);
+                        }}
+                      >
+                        <RotateCcw size={10} />
+                        {t('undo')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </>
+    );
   }
 
   // ── Unified court + inline actions ───────────────────────────────────────────
@@ -181,7 +287,7 @@ export default function LiveMatchPage() {
           }}
         >
           <div className={`text-[7px] font-bold leading-none ${isServer ? 'text-green-400' : 'text-slate-500'}`}>
-            P{pos}{isServer ? ' \u{1F3D0}' : ''}
+            P{pos}{isServer ? ' 🏐' : ''}
           </div>
           {player ? (
             <>
@@ -208,15 +314,11 @@ export default function LiveMatchPage() {
       );
     }
 
-    // ── Shared sub-menu screens (used by both game and coach flows) ──────────
-
+    // ── Shared sub-menu header ──────────────────────────────────────────────
     function SubHeader({ color, label }) {
       return (
         <div className="flex items-center gap-2 mb-2">
-          <button
-            className="text-slate-400 text-xs flex items-center gap-1 hover:text-slate-200 transition-colors"
-            onClick={popFlow}
-          >
+          <button className="text-slate-400 text-xs flex items-center gap-1 hover:text-slate-200 transition-colors" onClick={popFlow}>
             {'←'} {t('back')}
           </button>
           <span className={`text-xs font-bold ${color}`}>{label}</span>
@@ -224,7 +326,7 @@ export default function LiveMatchPage() {
       );
     }
 
-    // Attack error: step 1 — Blocked | Net Touch | Out
+    // Attack error step 1: Blocked | Net Touch | Out
     function AttackErrScreen() {
       return (
         <div className="p-3 flex flex-col gap-2">
@@ -238,7 +340,7 @@ export default function LiveMatchPage() {
       );
     }
 
-    // Attack error: step 2 (blocked) — 2nd or 3rd ball?
+    // Attack error step 2 (blocked): 2nd or 3rd ball?
     function BlockedBallScreen() {
       return (
         <div className="p-3 flex flex-col gap-2">
@@ -266,12 +368,11 @@ export default function LiveMatchPage() {
 
     // ── Inline action area renderer ────────────────────────────────────────
     function InlineActionArea() {
-      // Shared sub-screens intercept any flow regardless of game/coach
       if (currentFlow === 'attackErr')        return <AttackErrScreen />;
       if (currentFlow === 'attackErrBlocked') return <BlockedBallScreen />;
       if (currentFlow === 'defenseErr')       return <DefenceErrScreen />;
 
-      // ── Game mode ──────────────────────────────────────────────────────
+      // Game mode
       if (appMode === 'game') {
         if (currentFlow === 'gameMistake') {
           return (
@@ -295,10 +396,9 @@ export default function LiveMatchPage() {
         );
       }
 
-      // ── Coach mode: full sections ──────────────────────────────────────
+      // Coach mode
       return (
         <div className="px-2 py-2 space-y-3">
-          {/* Serve */}
           <div>
             <div className="text-[10px] font-bold text-sky-400 uppercase tracking-wider border-b border-sky-900/50 pb-0.5 mb-1.5">{t('catServe')}</div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -307,8 +407,6 @@ export default function LiveMatchPage() {
               <SmallBtn emoji="❌" label={t('serveError')} score="-1" color="red"   onClick={() => recordEvent(T.SERVE_ERROR)} />
             </div>
           </div>
-
-          {/* Attack 2nd — single "Attack Error" button opens sub-menu */}
           <div>
             <div className="text-[10px] font-bold text-orange-400 uppercase tracking-wider border-b border-orange-900/50 pb-0.5 mb-1.5">{t('catAttack')} — {t('secondBall')}</div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -317,8 +415,6 @@ export default function LiveMatchPage() {
               <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
             </div>
           </div>
-
-          {/* Attack 3rd — same consolidation */}
           <div>
             <div className="text-[10px] font-bold text-orange-400 uppercase tracking-wider border-b border-orange-900/50 pb-0.5 mb-1.5">{t('catAttack')} — {t('thirdBall')}</div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -327,8 +423,6 @@ export default function LiveMatchPage() {
               <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
             </div>
           </div>
-
-          {/* Defense */}
           <div>
             <div className="text-[10px] font-bold text-teal-400 uppercase tracking-wider border-b border-teal-900/50 pb-0.5 mb-1.5">{t('catDefense')}</div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -337,8 +431,6 @@ export default function LiveMatchPage() {
               <SmallBtn emoji="⛔" label={t('defenseError')} score="-1" color="red" onClick={() => pushFlow('defenseErr')} />
             </div>
           </div>
-
-          {/* Setting */}
           <div>
             <div className="text-[10px] font-bold text-violet-400 uppercase tracking-wider border-b border-violet-900/50 pb-0.5 mb-1.5">{t('catSetting')}</div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -346,8 +438,6 @@ export default function LiveMatchPage() {
               <SmallBtn emoji="🔴" label={t('setError')}   score="-1" color="red" onClick={() => recordEvent(T.SET_ERROR)} />
             </div>
           </div>
-
-          {/* Other */}
           <div>
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/50 pb-0.5 mb-1.5">{t('catOther')}</div>
             <div className="grid grid-cols-3 gap-1.5">
@@ -373,7 +463,7 @@ export default function LiveMatchPage() {
               onClick={() => setShowRotationSetup(true)}
               className="flex items-center gap-0.5 text-[9px] bg-indigo-900/80 hover:bg-indigo-800 active:scale-95 px-1.5 py-1 rounded-lg font-semibold border border-indigo-700/60 text-indigo-300 transition-colors"
             >
-              {'✎'} {t('setStartingPositions')}
+              ✎ {t('setStartingPositions')}
             </button>
             <button
               disabled={!canUndo}
@@ -416,7 +506,7 @@ export default function LiveMatchPage() {
               onClick={() => setShowRotationSetup(true)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-600 active:scale-95 text-white font-semibold text-sm transition-all"
             >
-              {'✎'} {t('setStartingPositions')}
+              ✎ {t('setStartingPositions')}
             </button>
           </div>
         ) : (
@@ -454,7 +544,7 @@ export default function LiveMatchPage() {
                   className="text-slate-500 hover:text-slate-300 text-lg leading-none px-1 transition-colors"
                   onClick={() => { dispatch({ type: 'DESELECT_PLAYER' }); clearFlow(); }}
                 >
-                  {'✕'}
+                  ✕
                 </button>
               </div>
               <InlineActionArea />
@@ -468,7 +558,6 @@ export default function LiveMatchPage() {
   return (
     <div className="bg-slate-900 flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
 
-      {/* Score header */}
       <ScoreHeader />
 
       {/* Control bar */}
@@ -501,6 +590,13 @@ export default function LiveMatchPage() {
               {t('endSet')} {currentMatch.currentSetIndex + 1}
             </button>
             <div className="flex-shrink-0 flex items-center gap-1.5">
+              <button
+                className="flex items-center gap-1 px-2.5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 active:scale-95 border border-slate-500 text-slate-200 font-bold text-xs transition-all"
+                onClick={() => setShowEventLog(true)}
+              >
+                <List size={12} />
+                {t('logTab')}
+              </button>
               <button
                 disabled={!lastEvent}
                 onClick={() => lastEvent && dispatch({ type: 'UNDO_LAST_EVENT' })}
@@ -539,16 +635,20 @@ export default function LiveMatchPage() {
         )}
       </div>
 
-      {/* Last event line */}
-      <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 bg-slate-900/80 border-b border-slate-700/30 overflow-hidden" dir="rtl">
-        <span className="text-slate-600 text-[9px] flex-shrink-0">{'↳'}</span>
-        <span className="text-slate-400 text-[10px] truncate">
-          {lastEvent
-            ? [lastEventPlayerName, lastEventLabel].filter(Boolean).join(' — ')
-            : t('noEventsYet')}
-        </span>
+      {/* Last event bar — flashes green after each logged event */}
+      <div className="flex-shrink-0 flex items-center gap-1.5 px-2 py-1 bg-slate-900/80 border-b border-slate-700/30 overflow-hidden">
+        {/* Last event text */}
+        <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden" dir="rtl">
+          <span className="text-slate-600 text-[9px] flex-shrink-0">↳</span>
+          <span className={`text-[10px] truncate transition-colors duration-300 ${eventFlash ? 'text-green-400 font-semibold' : 'text-slate-400'}`}>
+            {lastEvent
+              ? [lastEventPlayerName, lastEventLabel].filter(Boolean).join(' — ')
+              : t('noEventsYet')}
+          </span>
+        </div>
+        {/* Timestamp */}
         {lastEvent && (
-          <span className="text-slate-600 font-mono text-[9px] flex-shrink-0 ml-auto">
+          <span className="text-slate-600 font-mono text-[9px] flex-shrink-0">
             {new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
           </span>
         )}
@@ -580,6 +680,9 @@ export default function LiveMatchPage() {
       {!needsServeSetup && (showRotationSetup || needsRotationSetup) && (
         <RotationSetupModal onClose={handleRotationSetupClose} />
       )}
+
+      {/* Event log panel (slide-up) */}
+      {showEventLog && <EventLogPanel />}
     </div>
   );
 }

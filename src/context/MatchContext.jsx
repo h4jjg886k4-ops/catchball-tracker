@@ -206,7 +206,7 @@ function reducer(state, action) {
       return {
         ...state,
         currentMatch: updatedMatch,
-        // Keep selectedPlayerId so coach can quickly log another action for the same player
+        selectedPlayerId: null,
         showCourtDraw,
         lastScoreTeam: isHomeScore ? 'home' : isOpponentScore ? 'opponent' : null,
         pendingCourtDraw: showCourtDraw
@@ -263,7 +263,9 @@ function reducer(state, action) {
         id: uuidv4(), timestamp: Date.now(), outPlayerId, inPlayerId,
         homeScore: currentSet.homeScore, opponentScore: currentSet.opponentScore,
       };
-      const updatedSet = { ...currentSet, substitutions: [...currentSet.substitutions, sub] };
+      // Also update rotation so the court grid immediately shows the incoming player
+      const newRotation = currentSet.rotation.map(id => id === outPlayerId ? inPlayerId : id);
+      const updatedSet = { ...currentSet, substitutions: [...currentSet.substitutions, sub], rotation: newRotation };
       const updatedSets = [...match.sets];
       updatedSets[setIndex] = updatedSet;
       return { ...state, currentMatch: { ...match, sets: updatedSets }, showSubstitution: false };

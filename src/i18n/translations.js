@@ -128,6 +128,7 @@ export const translations = {
   switchPlayer:        { en: 'Switch Player',  he: 'החלף שחקן' },
   tapToUndo:           { en: 'Tap to undo', he: 'לחץ לביטול' },
   noEventsYet:         { en: 'No events yet',   he: 'אין אירועים' },
+  closeBtn:            { en: 'Close',           he: 'סגור' },
   manualScore:         { en: 'Manual score +1', he: 'ניקוד ידני +1' },
   undoLabel:           { en: 'UNDO',     he: 'בטל' },
 
