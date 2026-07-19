@@ -268,13 +268,17 @@ export default function StatsPage() {
               </div>
               <div className="grid grid-cols-3 divide-x divide-slate-700">
                 <StatBadge
-                  value={teamStats.sideOutPct !== null ? `${teamStats.sideOutPct}%` : '—'}
-                  label={t('sideOutStat')}
+                  value={teamStats.serveEffPct !== null
+                    ? `${teamStats.serveEffPct}% (${teamStats.serveEffWins}/${teamStats.serveEffTotal})`
+                    : '—'}
+                  label={t('gainPointAfterServe')}
                   color="blue"
                   size="lg"
                 />
                 <StatBadge
-                  value={teamStats.teamAttackPct !== null ? `${teamStats.teamAttackPct}%` : '—'}
+                  value={teamStats.teamAttackPct !== null
+                    ? `${teamStats.teamAttackPct}% (${teamStats.allAttackSuccess}/${teamStats.allAttackTotal})`
+                    : '—'}
                   label={t('attackPctLabel')}
                   color="green"
                   size="lg"
@@ -298,6 +302,7 @@ export default function StatsPage() {
               <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-700 text-slate-300 font-semibold text-sm flex items-center gap-2">
                   <Layers size={14} /> {t('rotEfficiency')}
+                  <span className="text-slate-500 text-xs font-normal">({t('frontRowLabel')})</span>
                 </div>
                 <div className="divide-y divide-slate-700/50">
                   {teamStats.rotationEfficiency.map(rot => {

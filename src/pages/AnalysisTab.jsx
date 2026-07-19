@@ -6,12 +6,13 @@ import {
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, LabelList,
+  LineChart, Line, ReferenceLine, PieChart, Pie, Cell, ResponsiveContainer, LabelList,
 } from 'recharts';
 import {
   calcAdvancedPlayerStats, calcAdvancedTeamStats,
   calcMomentum, calcClutchStats, calcErrorByGameState,
   buildScoreTimeline, calcEventDistribution, fetchAIInsights,
+  calcServeEfficiency, calcContributionScore, detectMomentumShifts,
 } from '../utils/analysisStats';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
@@ -65,39 +66,73 @@ function MiniStat({ label, value, color = 'text-white', sub }) {
   );
 }
 
-// ── Summary Cards ─────────────────────────────────────────────────────────────
-function SummaryCards({ currentMatch, teamStats, playerAdvancedMap, players, momentum, t }) {
+// ── Match Score Banner ────────────────────────────────────────────────────────
+function MatchScoreHeader({ currentMatch, t }) {
   const setsWon  = currentMatch.sets.filter(s => s.winner === 'home').length;
   const setsLost = currentMatch.sets.filter(s => s.winner === 'opponent').length;
+  const completedSets = currentMatch.sets.filter(s => s.winner);
 
+  return (
+    <Card>
+      <div className="px-4 py-4 text-center">
+        <div className="flex items-center justify-center gap-5">
+          <div className="text-right flex-1">
+            <div className="text-green-300 font-bold text-[10px] uppercase tracking-wide truncate">{currentMatch.homeTeam.name}</div>
+            <div className="text-green-400 font-black text-5xl tabular-nums">{setsWon}</div>
+          </div>
+          <div className="text-slate-600 text-xl font-light pb-1">–</div>
+          <div className="text-left flex-1">
+            <div className="text-red-300 font-bold text-[10px] uppercase tracking-wide truncate">{currentMatch.opponentTeam.name}</div>
+            <div className="text-red-400 font-black text-5xl tabular-nums">{setsLost}</div>
+          </div>
+        </div>
+        {completedSets.length > 0 && (
+          <div className="mt-3 flex justify-center gap-2 flex-wrap">
+            {completedSets.map((set, i) => (
+              <div key={i} className={`text-xs px-2.5 py-1 rounded-full border ${
+                set.winner === 'home'
+                  ? 'bg-green-900/30 border-green-700/50 text-green-300'
+                  : 'bg-red-900/30 border-red-700/50 text-red-300'
+              }`}>
+                {t('setLabel')} {i + 1}: {set.homeScore}–{set.opponentScore}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// ── Summary Cards ─────────────────────────────────────────────────────────────
+function SummaryCards({ teamStats, playerAdvancedMap, players, momentum, serveEff, t }) {
   const mvpEntry = players
     .map(p => ({ p, s: playerAdvancedMap[p.id] }))
     .filter(({ s }) => s && s.totalPoints > 0)
     .sort((a, b) => b.s.totalPoints - a.s.totalPoints)[0];
 
+  const fmt = (pct, num, den) =>
+    pct !== null && den ? `${pct}% (${num}/${den})` : '—';
+
   const cards = [
     {
-      label: t('finalScore'),
-      value: `${setsWon}–${setsLost}`,
-      sub: currentMatch.homeTeam.name,
-      color: setsWon > setsLost ? 'text-green-400' : 'text-red-400',
-    },
-    {
-      label: t('teamAttackPctLabel'),
-      value: teamStats.teamAttackPct !== null ? `${teamStats.teamAttackPct}%` : '—',
-      sub: `${teamStats.totalAttackWins}/${teamStats.totalAttackAttempts}`,
+      label: t('gainPointAfterServe'),
+      value: fmt(serveEff.pct, serveEff.wins, serveEff.total),
       color: 'text-blue-400',
     },
     {
+      label: t('teamAttackPctLabel'),
+      value: fmt(teamStats.teamAttackPct, teamStats.totalAttackWins, teamStats.totalAttackAttempts),
+      color: 'text-cyan-400',
+    },
+    {
       label: t('team2ndBallPct'),
-      value: teamStats.team2ndPct !== null ? `${teamStats.team2ndPct}%` : '—',
-      sub: `${teamStats.total2ndWins}/${teamStats.total2ndAttempts}`,
+      value: fmt(teamStats.team2ndPct, teamStats.total2ndWins, teamStats.total2ndAttempts),
       color: 'text-green-400',
     },
     {
       label: t('team3rdBallPct'),
-      value: teamStats.team3rdPct !== null ? `${teamStats.team3rdPct}%` : '—',
-      sub: `${teamStats.total3rdWins}/${teamStats.total3rdAttempts}`,
+      value: fmt(teamStats.team3rdPct, teamStats.total3rdWins, teamStats.total3rdAttempts),
       color: 'text-purple-400',
     },
     {
@@ -119,7 +154,7 @@ function SummaryCards({ currentMatch, teamStats, playerAdvancedMap, players, mom
       {cards.map((c, i) => (
         <Card key={i}>
           <div className="p-3 text-center">
-            <div className={`font-black text-lg leading-tight ${c.color}`}>{c.value}</div>
+            <div className={`font-bold text-sm leading-tight ${c.color}`}>{c.value}</div>
             <div className="text-slate-400 text-[10px] mt-0.5 leading-tight">{c.label}</div>
             {c.sub && <div className="text-slate-500 text-[10px]">{c.sub}</div>}
           </div>
@@ -238,7 +273,9 @@ function AttackEfficiencyChart({ playerAdvancedList, t }) {
 
 // ── Player Contribution Table ─────────────────────────────────────────────────
 function PlayerContributionTable({ playerAdvancedList, t }) {
-  const sorted = [...playerAdvancedList].sort((a, b) => b.stats.totalPoints - a.stats.totalPoints);
+  const sorted = [...playerAdvancedList]
+    .map(({ player, stats }) => ({ player, stats, score: calcContributionScore(stats) }))
+    .sort((a, b) => b.score - a.score);
 
   return (
     <Card>
@@ -248,15 +285,15 @@ function PlayerContributionTable({ playerAdvancedList, t }) {
           <thead>
             <tr className="border-b border-slate-700">
               <th className="text-left px-3 py-2 text-slate-400 font-semibold text-xs">{t('player')}</th>
+              <th className="text-center px-2 py-2 text-yellow-400 font-semibold text-xs">{t('contributionScore')}</th>
               <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('totalPtsLabel')}</th>
               <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('secondBallPct')}</th>
               <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('thirdBallPct')}</th>
-              <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('overallAttPct')}</th>
               <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('totalErrLabel')}</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map(({ player, stats }, i) => (
+            {sorted.map(({ player, stats, score }, i) => (
               <tr key={player.id} className={`border-b border-slate-700/50 ${i === 0 ? 'bg-yellow-900/10' : ''}`}>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2">
@@ -267,18 +304,14 @@ function PlayerContributionTable({ playerAdvancedList, t }) {
                     </div>
                   </div>
                 </td>
+                <td className="text-center px-2 py-2">
+                  <span className={`font-bold text-sm tabular-nums ${
+                    score > 0 ? 'text-yellow-400' : score < 0 ? 'text-red-400' : 'text-slate-500'
+                  }`}>{score > 0 ? `+${score}` : score}</span>
+                </td>
                 <td className="text-center px-2 py-2 text-green-400 font-bold">{stats.totalPoints}</td>
                 <td className="text-center px-2 py-2 text-slate-300 text-xs">{pctStr(stats.pct2nd, stats.wins2nd, stats.attempts2nd)}</td>
                 <td className="text-center px-2 py-2 text-slate-300 text-xs">{pctStr(stats.pct3rd, stats.wins3rd, stats.attempts3rd)}</td>
-                <td className="text-center px-2 py-2">
-                  <span className={`text-xs font-semibold ${
-                    stats.overallAttackPct === null ? 'text-slate-500' :
-                    stats.overallAttackPct >= 50 ? 'text-green-400' :
-                    stats.overallAttackPct >= 30 ? 'text-yellow-400' : 'text-red-400'
-                  }`}>
-                    {pctStr(stats.overallAttackPct, stats.totalAttackWins, stats.totalAttackAttempts)}
-                  </span>
-                </td>
                 <td className="text-center px-2 py-2 text-red-400">{stats.totalMistakes}</td>
               </tr>
             ))}
@@ -324,38 +357,62 @@ function AttackDistributionChart({ playerAdvancedList, t }) {
 }
 
 // ── Score Timeline ────────────────────────────────────────────────────────────
-function ScoreTimelineChart({ sets, setIndexOffset = 0, homeTeamName, opponentName, t }) {
+function ScoreTimelineChart({ sets, setIndexOffset = 0, homeTeamName, opponentName, momentumShifts, t }) {
   const perSetData = useMemo(() => buildScoreTimeline(sets, setIndexOffset), [sets, setIndexOffset]);
   if (!perSetData.length) return null;
 
   return (
     <Card>
       <SectionHeader title={t('scoreTimeline')} />
-      {perSetData.map(({ setNum, data }) => (
-        <div key={setNum}>
-          {perSetData.length > 1 && (
-            <div className="px-4 pt-3 pb-0 text-slate-400 text-xs font-bold uppercase tracking-wider">
-              {t('setLabel')} {setNum}
+      {perSetData.map(({ setNum, data }, idx) => {
+        const setShifts = (momentumShifts || []).filter(s => s.setIdx === idx);
+        return (
+          <div key={setNum}>
+            {perSetData.length > 1 && (
+              <div className="px-4 pt-3 pb-0 text-slate-400 text-xs font-bold uppercase tracking-wider">
+                {t('setLabel')} {setNum}
+              </div>
+            )}
+            {setShifts.length > 0 && (
+              <div className="px-4 pt-1 pb-0 flex gap-2 flex-wrap">
+                {setShifts.map((s, si) => (
+                  <span key={si} className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    s.team === 'home' ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'
+                  }`}>
+                    {s.team === 'home' ? homeTeamName : opponentName}: {s.count}×
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="p-3">
+              <ResponsiveContainer width="100%" height={170}>
+                <LineChart data={data} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="rally" tick={{ fill: '#94a3b8', fontSize: 10 }} label={{ value: t('rallyLabel'), position: 'insideBottom', offset: -2, fill: '#64748b', fontSize: 10 }} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={v => `${t('rallyLabel')} ${v}`} />
+                  <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
+                  {setShifts.map((s, si) => (
+                    <ReferenceLine
+                      key={si}
+                      x={s.rally}
+                      stroke={s.team === 'home' ? '#22c55e' : '#ef4444'}
+                      strokeDasharray="3 3"
+                      strokeWidth={1.5}
+                      label={{ value: `${s.count}×`, position: 'top', fill: s.team === 'home' ? '#22c55e' : '#ef4444', fontSize: 9 }}
+                    />
+                  ))}
+                  <Line type="monotone" dataKey="home" stroke="#3b82f6" dot={false} strokeWidth={2} name={homeTeamName} />
+                  <Line type="monotone" dataKey="opponent" stroke="#ef4444" dot={false} strokeWidth={2} name={opponentName} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-          )}
-          <div className="p-3">
-            <ResponsiveContainer width="100%" height={170}>
-              <LineChart data={data} margin={{ left: 0, right: 16, top: 8, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="rally" tick={{ fill: '#94a3b8', fontSize: 10 }} label={{ value: t('rallyLabel'), position: 'insideBottom', offset: -2, fill: '#64748b', fontSize: 10 }} />
-                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} allowDecimals={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={v => `${t('rallyLabel')} ${v}`} />
-                <Legend wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
-                <Line type="monotone" dataKey="home" stroke="#3b82f6" dot={false} strokeWidth={2} name={homeTeamName} />
-                <Line type="monotone" dataKey="opponent" stroke="#ef4444" dot={false} strokeWidth={2} name={opponentName} />
-              </LineChart>
-            </ResponsiveContainer>
+            {perSetData.length > 1 && setNum < perSetData[perSetData.length - 1].setNum && (
+              <div className="border-t border-slate-700/50 mx-4" />
+            )}
           </div>
-          {perSetData.length > 1 && setNum < perSetData[perSetData.length - 1].setNum && (
-            <div className="border-t border-slate-700/50 mx-4" />
-          )}
-        </div>
-      ))}
+        );
+      })}
     </Card>
   );
 }
@@ -773,8 +830,10 @@ export default function AnalysisTab({ currentMatch, t }) {
     return m;
   }, [playerAdvancedList]);
 
-  const teamStats     = useMemo(() => calcAdvancedTeamStats(players, filteredEvents), [players, filteredEvents]);
-  const momentum      = useMemo(() => calcMomentum(filteredEvents), [filteredEvents]);
+  const teamStats       = useMemo(() => calcAdvancedTeamStats(players, filteredEvents), [players, filteredEvents]);
+  const momentum        = useMemo(() => calcMomentum(filteredEvents), [filteredEvents]);
+  const serveEff        = useMemo(() => calcServeEfficiency(filteredSets), [filteredSets]);
+  const momentumShifts  = useMemo(() => detectMomentumShifts(filteredSets), [filteredSets]);
 
   const clutchMap = useMemo(() => {
     const m = {};
@@ -867,17 +926,20 @@ export default function AnalysisTab({ currentMatch, t }) {
         </div>
       )}
 
-      {/* 1. Summary Cards */}
+      {/* 1. Match Score Banner */}
+      <MatchScoreHeader currentMatch={currentMatch} t={t} />
+
+      {/* 2. Summary Cards */}
       <SummaryCards
-        currentMatch={currentMatch}
         teamStats={teamStats}
         playerAdvancedMap={playerAdvancedMap}
         players={players}
         momentum={momentum}
+        serveEff={serveEff}
         t={t}
       />
 
-      {/* 2. AI Insights */}
+      {/* 3. AI Insights */}
       <AIInsightsSection
         insights={insights}
         loading={aiLoading}
@@ -903,6 +965,7 @@ export default function AnalysisTab({ currentMatch, t }) {
         setIndexOffset={selectedSetIdx ?? 0}
         homeTeamName={currentMatch.homeTeam.name}
         opponentName={currentMatch.opponentTeam.name}
+        momentumShifts={momentumShifts}
         t={t}
       />
 

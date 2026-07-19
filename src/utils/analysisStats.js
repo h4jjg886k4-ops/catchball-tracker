@@ -191,6 +191,69 @@ export function calcEventDistribution(allEvents) {
     .map(([name, value]) => ({ name, value }));
 }
 
+export function calcServeEfficiency(sets) {
+  let wins = 0, total = 0;
+  sets.forEach(set => {
+    let serving = set.startServingTeam || 'home';
+    (set.events || []).forEach(ev => {
+      if (HOME_SCORE_EVENTS.has(ev.type)) {
+        if (serving === 'home') { wins++; total++; }
+        serving = 'home';
+      } else if (OPPONENT_SCORE_EVENTS.has(ev.type)) {
+        if (serving === 'home') total++;
+        serving = 'opponent';
+      }
+    });
+  });
+  return { wins, total, pct: total > 0 ? Math.round(wins / total * 100) : null };
+}
+
+export function calcContributionScore(stats) {
+  const pos =
+    (stats.wins2nd + stats.wins3rd) * 2 +
+    stats.aces * 2 +
+    stats.blocks * 2 +
+    stats.blockTouches * 1 +
+    (stats.cont2nd + stats.cont3rd) * 0.5;
+  const neg =
+    stats.serveErrors +
+    stats.attackOut +
+    stats.attackBlocked +
+    (stats.defenseError || 0) +
+    (stats.setError || 0) +
+    (stats.blockMistake || 0);
+  return Math.round((pos - neg) * 10) / 10;
+}
+
+export function detectMomentumShifts(sets, minRun = 3) {
+  const result = [];
+  sets.forEach((set, setIdx) => {
+    const events = (set.events || []).filter(e =>
+      HOME_SCORE_EVENTS.has(e.type) || OPPONENT_SCORE_EVENTS.has(e.type)
+    );
+    let curTeam = null, runStart = 0, runCount = 0, runStartEv = null, rally = 0;
+
+    const flush = () => {
+      if (runCount >= minRun) {
+        result.push({ setIdx, rally: runStart, team: curTeam, count: runCount, startEventType: runStartEv?.type });
+      }
+    };
+
+    events.forEach(ev => {
+      rally++;
+      const team = HOME_SCORE_EVENTS.has(ev.type) ? 'home' : 'opponent';
+      if (team === curTeam) {
+        runCount++;
+      } else {
+        flush();
+        curTeam = team; runStart = rally; runCount = 1; runStartEv = ev;
+      }
+    });
+    flush();
+  });
+  return result;
+}
+
 export async function fetchAIInsights(analysisData) {
   const { homeTeam, opponentTeam, team, playersSummary, momentum, clutchStats, errorStats } = analysisData;
 

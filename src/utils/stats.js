@@ -118,15 +118,15 @@ export function calcTeamStats(sets) {
 
   const allEvents = sets.flatMap(s => s.events || []);
 
-  let sideOutWins = 0, sideOutTotal = 0;
+  let serveEffWins = 0, serveEffTotal = 0;
   sets.forEach(set => {
     let servingTeam = set.startServingTeam || 'home';
     (set.events || []).forEach(event => {
       if (HOME_SCORE_EVENTS.has(event.type)) {
-        if (servingTeam === 'opponent') { sideOutWins++; sideOutTotal++; }
+        if (servingTeam === 'home') { serveEffWins++; serveEffTotal++; }
         servingTeam = 'home';
       } else if (OPPONENT_SCORE_EVENTS.has(event.type)) {
-        if (servingTeam === 'opponent') sideOutTotal++;
+        if (servingTeam === 'home') serveEffTotal++;
         servingTeam = 'opponent';
       }
     });
@@ -141,9 +141,9 @@ export function calcTeamStats(sets) {
     : null;
 
   return {
-    sideOutWins,
-    sideOutTotal,
-    sideOutPct: sideOutTotal > 0 ? Math.round(sideOutWins / sideOutTotal * 100) : null,
+    serveEffWins,
+    serveEffTotal,
+    serveEffPct: serveEffTotal > 0 ? Math.round(serveEffWins / serveEffTotal * 100) : null,
     teamAttackPct,
     allAttackSuccess: allAttackWin,
     allAttackError: allAttackErr,
@@ -161,16 +161,19 @@ export function calcTeamStats(sets) {
 }
 
 export function calcRotationEfficiency(sets) {
-  const pts    = Array(6).fill(0);
-  const rallies = Array(6).fill(0);
-  const playerIdSets = Array(6).fill(null).map(() => new Set());
+  const pts      = Array(6).fill(0);
+  const rallies  = Array(6).fill(0);
+  const frontRow = Array(6).fill(null).map(() => new Set());
   sets.forEach(set => {
     (set.events || []).forEach(event => {
       const i = (event.rotationIndex || 0) % 6;
       rallies[i]++;
       if (HOME_SCORE_EVENTS.has(event.type)) pts[i]++;
-      if (Array.isArray(event.rotationSnapshot) && event.rotationSnapshot[0]) {
-        playerIdSets[i].add(event.rotationSnapshot[0]);
+      if (Array.isArray(event.rotationSnapshot)) {
+        // Front row: positions 2, 3, 4 = indices 1, 2, 3 of the rotation array
+        [1, 2, 3].forEach(idx => {
+          if (event.rotationSnapshot[idx]) frontRow[i].add(event.rotationSnapshot[idx]);
+        });
       }
     });
   });
@@ -179,7 +182,7 @@ export function calcRotationEfficiency(sets) {
     points: p,
     rallies: rallies[i],
     efficiency: rallies[i] > 0 ? Math.round(p / rallies[i] * 100) : null,
-    playerIds: [...playerIdSets[i]],
+    playerIds: [...frontRow[i]],
   }));
 }
 
