@@ -59,6 +59,8 @@ export const OPPONENT_SCORE_EVENTS = new Set([
   T.ATTACK_NET_TOUCH,
   T.DEFENSE_ERROR,
   T.SET_ERROR,
+  T.BLOCK_ERROR,
+  T.DEFENCE_LOCATION_ERROR,
 ]);
 
 // Events that trigger the court attack drawing popup (opponent scored via an attack we could have defended)
@@ -67,6 +69,8 @@ export const COURT_DRAW_EVENTS = new Set([
   T.ATTACK_NET_TOUCH,
   T.SET_ERROR,
   T.BLOCK_MISTAKE,
+  T.BLOCK_ERROR,
+  T.DEFENCE_LOCATION_ERROR,
 ]);
 
 // Events where rally continues (neither team scored yet)
@@ -79,8 +83,6 @@ export const NEUTRAL_EVENTS = new Set([
   T.FREE_BALL,
   T.BLOCK_TOUCH,
   T.BLOCK_MISTAKE,
-  T.BLOCK_ERROR,
-  T.DEFENCE_LOCATION_ERROR,
   T.SUBSTITUTION,
 ]);
 
@@ -114,8 +116,8 @@ export const EVENT_CONFIG = [
   { type: T.OPPONENT_ERROR,          label: 'Opponent Error',           emoji: '🎁', score: '+1', color: 'green', category: 'other' },
   { type: T.FREE_BALL,               label: 'Free Ball',                emoji: '🏐', score: null, color: 'slate', category: 'other' },
   // Defence coaching events (neutral, no scoring)
-  { type: T.BLOCK_ERROR,             label: 'Block Error',              emoji: '🚧', score: null, color: 'red',   category: 'defense' },
-  { type: T.DEFENCE_LOCATION_ERROR,  label: 'Defence Location Error',   emoji: '📍', score: null, color: 'red',   category: 'defense' },
+  { type: T.BLOCK_ERROR,             label: 'Block Error',              emoji: '🚧', score: '-1', color: 'red',   category: 'defense' },
+  { type: T.DEFENCE_LOCATION_ERROR,  label: 'Defence Location Error',   emoji: '📍', score: '-1', color: 'red',   category: 'defense' },
   // Meta — substitution log entry (no scoring, not undoable)
   { type: T.SUBSTITUTION,            label: 'Substitution',             emoji: '🔄', score: null, color: 'slate', category: 'other' },
 ];
