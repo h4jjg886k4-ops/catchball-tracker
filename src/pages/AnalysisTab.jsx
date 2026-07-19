@@ -20,12 +20,15 @@ import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
 const ERROR_RED_RAMP = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444', '#f87171'];
 
 const ERROR_TYPE_DEFS = [
-  { type: 'serve_error',    labelKey: 'serveError',    directPts: true  },
-  { type: 'attack_out',     labelKey: 'attackOut',     directPts: true  },
-  { type: 'attack_blocked', labelKey: 'attackBlocked', directPts: true  },
-  { type: 'defense_error',  labelKey: 'defenseError',  directPts: true  },
-  { type: 'set_error',      labelKey: 'setError',      directPts: true  },
-  { type: 'block_mistake',  labelKey: 'blockMistake',  directPts: false },
+  { type: 'serve_error',            labelKey: 'serveError',          directPts: true  },
+  { type: 'attack_out',             labelKey: 'attackOut',           directPts: true  },
+  { type: 'attack_blocked',         labelKey: 'attackBlocked',       directPts: true  },
+  { type: 'attack_net_touch',       labelKey: 'attackNetTouch',      directPts: true  },
+  { type: 'defense_error',          labelKey: 'defenseError',        directPts: true  },
+  { type: 'set_error',              labelKey: 'setError',            directPts: true  },
+  { type: 'block_mistake',          labelKey: 'blockMistake',        directPts: false },
+  { type: 'block_error',            labelKey: 'blockError',          directPts: false },
+  { type: 'defence_location_error', labelKey: 'defenceLocationError',directPts: false },
 ];
 
 const TOOLTIP_STYLE = {

@@ -1,24 +1,66 @@
 import React, { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw, Shuffle } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
-import { VIEWS, POSITION_ABBR, EVENT_CONFIG } from '../utils/constants';
+import { VIEWS, EVENT_TYPES as T, EVENT_CONFIG } from '../utils/constants';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { calcPlayerStats } from '../utils/stats';
 import ScoreHeader from '../components/ui/ScoreHeader';
-import EventButtons from '../components/ui/EventButtons';
-import GameModeButtons from '../components/ui/GameModeButtons';
 import SubstitutionModal from '../components/modals/SubstitutionModal';
 import CourtDrawModal from '../components/modals/CourtDrawModal';
 import HeatmapModal from '../components/modals/HeatmapModal';
 import RotationSetupModal from '../components/modals/RotationSetupModal';
 import ServeSetupModal from '../components/modals/ServeSetupModal';
 
-// Physical court positions — always LTR regardless of language
+// Physical court layout — always LTR
 const COURT_LAYOUT = [
   [4, 0, 0], [3, 0, 1], [2, 0, 2],
   [5, 1, 0], [6, 1, 1], [1, 1, 2],
 ];
+
+// ── Reusable inline button primitives ────────────────────────────────────────
+function BigBtn({ emoji, label, score, color = 'slate', onClick }) {
+  const cls = {
+    green:  'bg-green-800/80 border-green-600 text-green-100 active:bg-green-700',
+    red:    'bg-red-900/80   border-red-700   text-red-200   active:bg-red-800',
+    blue:   'bg-blue-900/70  border-blue-700  text-blue-200  active:bg-blue-800',
+    amber:  'bg-amber-900/70 border-amber-700 text-amber-200 active:bg-amber-800',
+    slate:  'bg-slate-700/80 border-slate-600 text-slate-200 active:bg-slate-600',
+    teal:   'bg-teal-900/70  border-teal-700  text-teal-200  active:bg-teal-800',
+  }[color] ?? 'bg-slate-700/80 border-slate-600 text-slate-200 active:bg-slate-600';
+  return (
+    <button
+      className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border-2 text-center transition-all active:scale-95 px-1 py-2 h-[72px] ${cls}`}
+      onClick={onClick}
+    >
+      <span className="text-xl leading-none">{emoji}</span>
+      <span className="text-[10px] font-bold leading-tight">{label}</span>
+      {score && <span className={`text-[9px] font-black ${score === '+1' ? 'text-green-300' : 'text-red-300'}`}>{score}</span>}
+    </button>
+  );
+}
+
+function SmallBtn({ emoji, label, score, color = 'slate', onClick }) {
+  const cls = {
+    green:  'bg-green-900/70 border-green-700 text-green-200 active:bg-green-800',
+    red:    'bg-red-900/70   border-red-700   text-red-200   active:bg-red-800',
+    blue:   'bg-blue-900/70  border-blue-700  text-blue-200  active:bg-blue-800',
+    slate:  'bg-slate-700/60 border-slate-600 text-slate-300 active:bg-slate-600',
+    teal:   'bg-teal-900/60  border-teal-700  text-teal-300  active:bg-teal-800',
+    amber:  'bg-amber-900/60 border-amber-700 text-amber-200 active:bg-amber-800',
+  }[color] ?? 'bg-slate-700/60 border-slate-600 text-slate-300 active:bg-slate-600';
+  return (
+    <button
+      className={`flex flex-col items-center justify-center gap-0.5 rounded-xl border text-center transition-all active:scale-95 px-1 py-2 h-[58px] ${cls}`}
+      onClick={onClick}
+    >
+      {emoji && <span className="text-base leading-none">{emoji}</span>}
+      <span className="text-[10px] font-semibold leading-tight text-center">{label}</span>
+      {score && <span className={`text-[9px] font-black ${score === '+1' ? 'text-green-300' : 'text-red-300'}`}>{score}</span>}
+    </button>
+  );
+}
 
 export default function LiveMatchPage() {
   const { state, dispatch, navigate, forceSave } = useMatch();
@@ -31,6 +73,12 @@ export default function LiveMatchPage() {
   const [showRotationSetup, setShowRotationSetup] = useState(false);
   const [showEndSetConfirm, setShowEndSetConfirm] = useState(false);
   const [undoFlash, setUndoFlash] = useState(false);
+  // Flow stack — each entry is a named screen step; back pops the stack
+  const [flowStack, setFlowStack] = useState([]);
+  const currentFlow = flowStack[flowStack.length - 1] ?? null;
+  const pushFlow  = (step) => setFlowStack(s => [...s, step]);
+  const popFlow   = ()     => setFlowStack(s => s.slice(0, -1));
+  const clearFlow = ()     => setFlowStack([]);
   const appMode = state.appMode;
 
   useEffect(() => {
@@ -62,24 +110,25 @@ export default function LiveMatchPage() {
   const lastEventConf  = lastEvent ? EVENT_CONFIG.find(e => e.type === lastEvent.type) : null;
   const lastEventLabel = lastEventConf && EVENT_TYPE_I18N_KEY[lastEventConf.type]
     ? t(EVENT_TYPE_I18N_KEY[lastEventConf.type]) : lastEventConf?.label;
+  const lastEventPlayerName = lastEvent?.playerId
+    ? (players.find(p => p.id === lastEvent.playerId)?.name?.split(' ')[0] ?? null)
+    : null;
 
-  // Current on-court players (rotation + substitutions applied)
-  const currentOnCourt = new Set(currentSet.rotation.filter(id => id !== ''));
-  for (const sub of currentSet.substitutions) {
-    currentOnCourt.delete(sub.outPlayerId);
-    currentOnCourt.add(sub.inPlayerId);
+  function recordEvent(type, extra = {}) {
+    if (!selectedPlayerId) return;
+    dispatch({
+      type: 'RECORD_EVENT',
+      event: { id: uuidv4(), type, playerId: selectedPlayerId, timestamp: Date.now(), ...extra },
+    });
+    clearFlow();
   }
-  const courtPlayers = players.filter(p => currentOnCourt.has(p.id));
 
-  function handlePlayerSelect(playerId) { dispatch({ type: 'SELECT_PLAYER', playerId }); }
   async function handleEndSet() {
     try {
       await forceSave();
       dispatch({ type: 'END_SET' });
       setShowEndSetConfirm(false);
-    } catch {
-      // saveStatus.error is shown in the header — do not proceed
-    }
+    } catch { /* saveStatus.error shown in header */ }
   }
 
   async function handleEndMatch() {
@@ -87,69 +136,245 @@ export default function LiveMatchPage() {
     try {
       await forceSave();
       dispatch({ type: 'END_MATCH' });
-    } catch {
-      alert(t('saveFailedAbort'));
-    }
+    } catch { alert(t('saveFailedAbort')); }
   }
+
   function handleRotationSetupClose() {
     setShowRotationSetup(false);
     if (needsRotationSetup) dispatch({ type: 'DISMISS_ROTATION_SETUP' });
   }
 
-  // ── Compact player card ──────────────────────────────────────────────────────
-  function PlayerCell({ player }) {
-    const stats = calcPlayerStats(player.id, allEvents);
-    const isSelected = selectedPlayerId === player.id;
-    return (
-      <button
-        className={`flex flex-col items-center justify-center gap-0.5 px-1.5 rounded-xl border transition-all active:scale-[0.97] w-full h-full ${
-          isSelected
-            ? 'bg-blue-900 border-blue-500 shadow-lg shadow-blue-900/40'
-            : 'bg-slate-800 border-slate-700 hover:border-blue-700'
-        }`}
-        onClick={() => handlePlayerSelect(player.id)}
-      >
-        {/* Jersey + name on same row */}
-        <div className="flex items-center gap-1.5">
-          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-black flex-shrink-0 ${
-            isSelected ? 'bg-blue-700 border-blue-400 text-white' : 'bg-slate-700 border-slate-600 text-white'
-          }`}>
-            {player.number}
-          </div>
-          <span className="text-white font-bold text-sm leading-none truncate max-w-[5.5rem]">{player.name}</span>
-        </div>
-        {/* Stats row */}
-        <div className="flex items-center gap-1">
-          <span className="text-green-400 text-[10px] font-bold tabular-nums">{stats.cardPoints}<span className="text-green-600 text-[8px]">נק׳</span></span>
-          <span className="text-slate-600 text-[8px]">|</span>
-          <span className="text-blue-400 text-[10px] font-bold tabular-nums">{stats.cardAttacks}<span className="text-blue-600 text-[8px]">התק׳</span></span>
-          <span className="text-slate-600 text-[8px]">|</span>
-          <span className="text-red-400 text-[10px] font-bold tabular-nums">{stats.cardMistakes}<span className="text-red-600 text-[8px]">שג׳</span></span>
-        </div>
-      </button>
-    );
-  }
-
-  // ── Rotation court panel ─────────────────────────────────────────────────────
-  function CourtPanel() {
-    const rotation = currentSet.rotation;
-    const rotIdx   = currentMatch.currentRotationIndex;
-    const canUndo  = (currentMatch.rotationHistory || []).length > 0;
+  // ── Unified court + inline actions ───────────────────────────────────────────
+  function UnifiedCourtAndActions() {
+    const rotation    = currentSet.rotation;
+    const rotIdx      = currentMatch.currentRotationIndex;
+    const canUndo     = (currentMatch.rotationHistory || []).length > 0;
+    const hasRotation = rotation.some(id => id !== '');
+    const selectedPlayer = selectedPlayerId ? players.find(p => p.id === selectedPlayerId) : null;
 
     function playerAt(pos) {
       const id = rotation[pos - 1];
       return players.find(p => p.id === id) ?? null;
     }
 
+    // ── Court cell ──────────────────────────────────────────────────────────
+    function CourtCell({ pos }) {
+      const player     = playerAt(pos);
+      const isServer   = pos === 1;
+      const isSelected = !!(player && selectedPlayerId === player.id);
+      const stats      = player ? calcPlayerStats(player.id, allEvents) : null;
+
+      return (
+        <button
+          className={`flex flex-col items-center justify-center rounded-xl border-2 transition-all select-none overflow-hidden ${
+            isSelected
+              ? 'bg-blue-900 border-blue-400 shadow-lg shadow-blue-900/50'
+              : isServer
+                ? 'bg-green-900/60 border-green-600/70 active:bg-green-800/70'
+                : 'bg-slate-800/70 border-slate-600/50 active:bg-slate-700/70'
+          }`}
+          style={{ height: 76 }}
+          onClick={() => {
+            if (!player) return;
+            if (isSelected) { dispatch({ type: 'DESELECT_PLAYER' }); clearFlow(); }
+            else            { dispatch({ type: 'SELECT_PLAYER', playerId: player.id }); clearFlow(); }
+          }}
+        >
+          <div className={`text-[7px] font-bold leading-none ${isServer ? 'text-green-400' : 'text-slate-500'}`}>
+            P{pos}{isServer ? ' \u{1F3D0}' : ''}
+          </div>
+          {player ? (
+            <>
+              <div className={`font-black tabular-nums text-xl leading-none mt-0.5 ${isSelected ? 'text-blue-200' : isServer ? 'text-green-200' : 'text-white'}`}>
+                {player.number}
+              </div>
+              <div className={`text-[9px] font-semibold truncate w-full px-1 text-center leading-tight ${isSelected ? 'text-blue-300' : isServer ? 'text-green-400' : 'text-slate-300'}`}>
+                {player.name.split(' ')[0]}
+              </div>
+              {stats && (
+                <div className="flex items-center gap-0.5 mt-0.5">
+                  <span className="text-green-400 text-[8px] font-bold">{stats.cardPoints}</span>
+                  <span className="text-slate-600 text-[7px]">|</span>
+                  <span className="text-blue-400 text-[8px] font-bold">{stats.cardAttacks}</span>
+                  <span className="text-slate-600 text-[7px]">|</span>
+                  <span className="text-red-400 text-[8px] font-bold">{stats.cardMistakes}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-slate-600 text-sm">—</div>
+          )}
+        </button>
+      );
+    }
+
+    // ── Shared sub-menu screens (used by both game and coach flows) ──────────
+
+    function SubHeader({ color, label }) {
+      return (
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            className="text-slate-400 text-xs flex items-center gap-1 hover:text-slate-200 transition-colors"
+            onClick={popFlow}
+          >
+            {'←'} {t('back')}
+          </button>
+          <span className={`text-xs font-bold ${color}`}>{label}</span>
+        </div>
+      );
+    }
+
+    // Attack error: step 1 — Blocked | Net Touch | Out
+    function AttackErrScreen() {
+      return (
+        <div className="p-3 flex flex-col gap-2">
+          <SubHeader color="text-red-400" label={t('attackErrSubmenu')} />
+          <div className="grid grid-cols-3 gap-2">
+            <BigBtn emoji="🛑" label={t('blockedAttackLabel')} score="-1" color="red" onClick={() => pushFlow('attackErrBlocked')} />
+            <BigBtn emoji="🕸️" label={t('attackNetTouch')}    score="-1" color="red" onClick={() => recordEvent(T.ATTACK_NET_TOUCH)} />
+            <BigBtn emoji="💥" label={t('attackOut')}          score="-1" color="red" onClick={() => recordEvent(T.ATTACK_OUT)} />
+          </div>
+        </div>
+      );
+    }
+
+    // Attack error: step 2 (blocked) — 2nd or 3rd ball?
+    function BlockedBallScreen() {
+      return (
+        <div className="p-3 flex flex-col gap-2">
+          <SubHeader color="text-red-400" label={t('chooseBallNumber')} />
+          <div className="grid grid-cols-2 gap-2">
+            <BigBtn emoji="2️⃣" label={t('secondBall')} score="-1" color="red" onClick={() => recordEvent(T.ATTACK_BLOCKED, { ballNumber: 2 })} />
+            <BigBtn emoji="3️⃣" label={t('thirdBall')}  score="-1" color="red" onClick={() => recordEvent(T.ATTACK_BLOCKED, { ballNumber: 3 })} />
+          </div>
+        </div>
+      );
+    }
+
+    // Defence error sub-menu
+    function DefenceErrScreen() {
+      return (
+        <div className="p-3 flex flex-col gap-2">
+          <SubHeader color="text-teal-400" label={t('defenceErrSubmenu')} />
+          <div className="grid grid-cols-2 gap-2">
+            <BigBtn emoji="🚧" label={t('blockError')}           color="red" onClick={() => recordEvent(T.BLOCK_ERROR)} />
+            <BigBtn emoji="📍" label={t('defenceLocationError')} color="red" onClick={() => recordEvent(T.DEFENCE_LOCATION_ERROR)} />
+          </div>
+        </div>
+      );
+    }
+
+    // ── Inline action area renderer ────────────────────────────────────────
+    function InlineActionArea() {
+      // Shared sub-screens intercept any flow regardless of game/coach
+      if (currentFlow === 'attackErr')        return <AttackErrScreen />;
+      if (currentFlow === 'attackErrBlocked') return <BlockedBallScreen />;
+      if (currentFlow === 'defenseErr')       return <DefenceErrScreen />;
+
+      // ── Game mode ──────────────────────────────────────────────────────
+      if (appMode === 'game') {
+        if (currentFlow === 'gameMistake') {
+          return (
+            <div className="p-2 flex flex-col gap-2">
+              <SubHeader color="text-orange-400" label={t('gmMistakeHint')} />
+              <div className="grid grid-cols-3 gap-2">
+                <BigBtn emoji="❌" label={t('gmBadServe')}   score="-1" color="red"   onClick={() => recordEvent(T.SERVE_ERROR)} />
+                <BigBtn emoji="💢" label={t('attackErrBtn')} score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
+                <BigBtn emoji="🏐" label={t('gmBadPass')}    color="slate"             onClick={() => recordEvent(T.FREE_BALL)} />
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="p-2 grid grid-cols-2 gap-2" style={{ gridTemplateRows: '72px 72px' }}>
+            <BigBtn emoji="⚡" label={t('gmSuccessAttack')} score="+1" color="green" onClick={() => recordEvent(T.ATTACK_WIN_3RD)} />
+            <BigBtn emoji="↩️" label={t('gmFailedAttempt')} color="blue"             onClick={() => recordEvent(T.ATTACK_CONT_3RD)} />
+            <BigBtn emoji="🎯" label={t('ace')}             score="+1" color="green" onClick={() => recordEvent(T.ACE)} />
+            <BigBtn emoji="⚠️" label={t('gmMistake')}       color="amber"            onClick={() => pushFlow('gameMistake')} />
+          </div>
+        );
+      }
+
+      // ── Coach mode: full sections ──────────────────────────────────────
+      return (
+        <div className="px-2 py-2 space-y-3">
+          {/* Serve */}
+          <div>
+            <div className="text-[10px] font-bold text-sky-400 uppercase tracking-wider border-b border-sky-900/50 pb-0.5 mb-1.5">{t('catServe')}</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <SmallBtn emoji="🎯" label={t('ace')}        score="+1" color="green" onClick={() => recordEvent(T.ACE)} />
+              <SmallBtn emoji="✅" label={t('serveIn')}    color="blue"             onClick={() => recordEvent(T.SERVE_IN)} />
+              <SmallBtn emoji="❌" label={t('serveError')} score="-1" color="red"   onClick={() => recordEvent(T.SERVE_ERROR)} />
+            </div>
+          </div>
+
+          {/* Attack 2nd — single "Attack Error" button opens sub-menu */}
+          <div>
+            <div className="text-[10px] font-bold text-orange-400 uppercase tracking-wider border-b border-orange-900/50 pb-0.5 mb-1.5">{t('catAttack')} — {t('secondBall')}</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <SmallBtn emoji="⚡" label={t('attackWin2nd')}  score="+1" color="green" onClick={() => recordEvent(T.ATTACK_WIN_2ND)} />
+              <SmallBtn emoji="↩️" label={t('attackCont2nd')} color="blue"             onClick={() => recordEvent(T.ATTACK_CONT_2ND)} />
+              <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
+            </div>
+          </div>
+
+          {/* Attack 3rd — same consolidation */}
+          <div>
+            <div className="text-[10px] font-bold text-orange-400 uppercase tracking-wider border-b border-orange-900/50 pb-0.5 mb-1.5">{t('catAttack')} — {t('thirdBall')}</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <SmallBtn emoji="⚡" label={t('attackWin3rd')}  score="+1" color="green" onClick={() => recordEvent(T.ATTACK_WIN_3RD)} />
+              <SmallBtn emoji="↩️" label={t('attackCont3rd')} color="blue"             onClick={() => recordEvent(T.ATTACK_CONT_3RD)} />
+              <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
+            </div>
+          </div>
+
+          {/* Defense */}
+          <div>
+            <div className="text-[10px] font-bold text-teal-400 uppercase tracking-wider border-b border-teal-900/50 pb-0.5 mb-1.5">{t('catDefense')}</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <SmallBtn emoji="🖐️" label={t('blockTouch')}   color="teal"  onClick={() => recordEvent(T.BLOCK_TOUCH)} />
+              <SmallBtn emoji="🚫" label={t('blockMistake')} color="slate" onClick={() => recordEvent(T.BLOCK_MISTAKE)} />
+              <SmallBtn emoji="⛔" label={t('defenseError')} score="-1" color="red" onClick={() => pushFlow('defenseErr')} />
+            </div>
+          </div>
+
+          {/* Setting */}
+          <div>
+            <div className="text-[10px] font-bold text-violet-400 uppercase tracking-wider border-b border-violet-900/50 pb-0.5 mb-1.5">{t('catSetting')}</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <SmallBtn emoji="🙌" label={t('setSuccess')} color="blue" onClick={() => recordEvent(T.SET_SUCCESS)} />
+              <SmallBtn emoji="🔴" label={t('setError')}   score="-1" color="red" onClick={() => recordEvent(T.SET_ERROR)} />
+            </div>
+          </div>
+
+          {/* Other */}
+          <div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/50 pb-0.5 mb-1.5">{t('catOther')}</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <SmallBtn emoji="🛡️" label={t('block')}         score="+1" color="green" onClick={() => recordEvent(T.BLOCK)} />
+              <SmallBtn emoji="🎁" label={t('opponentError')} score="+1" color="green" onClick={() => recordEvent(T.OPPONENT_ERROR)} />
+              <SmallBtn emoji="🏐" label={t('freeBall')}      color="slate"             onClick={() => recordEvent(T.FREE_BALL)} />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex-1 min-h-0 flex flex-col bg-slate-800/70 border-t border-slate-700 overflow-hidden" dir="ltr">
 
-        {/* Header row: rotation controls + sub button */}
+        {/* Rotation header */}
         <div className="flex-shrink-0 flex items-center gap-1 px-2 py-1.5 border-b border-slate-700/60">
           <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold flex-shrink-0">
             {t('rotationLabel')} {rotIdx + 1}
           </span>
-          <div className="flex items-center gap-1 flex-1 justify-end">
+          <div className="flex items-center gap-1 flex-1 justify-end flex-wrap">
+            <button
+              onClick={() => setShowRotationSetup(true)}
+              className="flex items-center gap-0.5 text-[9px] bg-indigo-900/80 hover:bg-indigo-800 active:scale-95 px-1.5 py-1 rounded-lg font-semibold border border-indigo-700/60 text-indigo-300 transition-colors"
+            >
+              {'✎'} {t('setStartingPositions')}
+            </button>
             <button
               disabled={!canUndo}
               onClick={() => canUndo && dispatch({ type: 'UNDO_ROTATION' })}
@@ -168,13 +393,6 @@ export default function LiveMatchPage() {
               <RotateCw size={9} /> {t('rotateBtn')}
             </button>
             <button
-              onClick={() => setShowRotationSetup(true)}
-              className="text-[9px] text-slate-500 hover:text-slate-300 px-1.5 py-1 rounded transition-colors"
-            >
-              ✎
-            </button>
-            {/* Sub button lives here */}
-            <button
               className="flex items-center gap-0.5 text-[10px] bg-blue-800 hover:bg-blue-700 active:scale-95 px-2 py-1 rounded-lg font-semibold border border-blue-600 text-blue-100 transition-colors"
               onClick={() => dispatch({ type: 'SHOW_SUBSTITUTION' })}
             >
@@ -190,47 +408,58 @@ export default function LiveMatchPage() {
           <div className="flex-1 h-px bg-yellow-500/40 rounded" />
         </div>
 
-        {/* 2-row × 3-col court grid */}
-        <div
-          className="flex-1 min-h-0 grid grid-cols-3 px-1.5 pb-1.5 gap-1"
-          style={{ gridTemplateRows: 'repeat(2, 1fr)' }}
-        >
-          {COURT_LAYOUT.map(([pos]) => {
-            const player   = playerAt(pos);
-            const isServer = pos === 1;
-            return (
-              <div
-                key={pos}
-                className={`rounded-lg flex flex-col items-center justify-center overflow-hidden ${
-                  isServer
-                    ? 'bg-green-900/60 border-2 border-green-600/60 shadow-md shadow-green-900/30'
-                    : 'bg-slate-700/50 border border-slate-600/50'
-                }`}
-              >
-                <div className={`text-[8px] font-bold leading-none mb-0.5 ${isServer ? 'text-green-400' : 'text-slate-500'}`}>
-                  P{pos}{isServer ? ' 🏐' : ''}
+        {/* Court grid or setup prompt */}
+        {!hasRotation ? (
+          <div className="flex-shrink-0 flex flex-col items-center justify-center py-5 gap-3">
+            <p className="text-slate-500 text-sm">{t('noRotationSetup')}</p>
+            <button
+              onClick={() => setShowRotationSetup(true)}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-600 active:scale-95 text-white font-semibold text-sm transition-all"
+            >
+              {'✎'} {t('setStartingPositions')}
+            </button>
+          </div>
+        ) : (
+          <div
+            className="flex-shrink-0 grid grid-cols-3 px-1.5 pb-1 gap-1"
+            style={{ gridTemplateRows: '76px 76px' }}
+          >
+            {COURT_LAYOUT.map(([pos]) => <CourtCell key={pos} pos={pos} />)}
+          </div>
+        )}
+
+        {/* Separator */}
+        <div className="flex-shrink-0 border-t border-slate-700/50" />
+
+        {/* Action area */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {!selectedPlayer ? (
+            <div className="flex items-center justify-center h-full min-h-[60px]">
+              <span className="text-slate-600 text-sm">{hasRotation ? t('tapPlayerToLog') : ''}</span>
+            </div>
+          ) : (
+            <>
+              {/* Selected player chip */}
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-700/40 bg-blue-900/20">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-blue-700 border border-blue-500 flex items-center justify-center text-[10px] font-black text-white flex-shrink-0">
+                    {selectedPlayer.number}
+                  </div>
+                  <span className="text-blue-200 text-sm font-semibold">{selectedPlayer.name}</span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${appMode === 'game' ? 'bg-blue-800 text-blue-300' : 'bg-purple-800 text-purple-300'}`}>
+                    {t(appMode === 'game' ? 'gameModeShort' : 'coachModeShort')}
+                  </span>
                 </div>
-                {player ? (
-                  <>
-                    <div
-                      className={`font-black tabular-nums leading-none ${isServer ? 'text-green-200' : 'text-white'}`}
-                      style={{ fontSize: 'clamp(0.9rem, 2.8vh, 1.75rem)' }}
-                    >
-                      {player.number}
-                    </div>
-                    <div
-                      className={`text-center truncate w-full px-0.5 leading-tight font-semibold ${isServer ? 'text-green-300/90' : 'text-slate-300'}`}
-                      style={{ fontSize: 'clamp(0.55rem, 1.3vh, 0.8rem)' }}
-                    >
-                      {player.name.split(' ')[0]}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-600 text-sm">—</div>
-                )}
+                <button
+                  className="text-slate-500 hover:text-slate-300 text-lg leading-none px-1 transition-colors"
+                  onClick={() => { dispatch({ type: 'DESELECT_PLAYER' }); clearFlow(); }}
+                >
+                  {'✕'}
+                </button>
               </div>
-            );
-          })}
+              <InlineActionArea />
+            </>
+          )}
         </div>
       </div>
     );
@@ -239,14 +468,13 @@ export default function LiveMatchPage() {
   return (
     <div className="bg-slate-900 flex flex-col overflow-hidden" style={{ height: '100dvh' }}>
 
-      {/* Zone 1: Score header + serve indicator */}
+      {/* Score header */}
       <ScoreHeader />
 
-      {/* Control bar — always LTR so visual order is predictable */}
+      {/* Control bar */}
       <div className="flex-shrink-0 bg-slate-900/95 border-b border-slate-700/60 flex items-center px-2 py-1.5 gap-2" dir="ltr">
         {!showEndSetConfirm ? (
           <>
-            {/* LEFT: mode toggle */}
             <div className="flex-shrink-0 flex items-center border border-slate-700 rounded-lg overflow-hidden">
               <button
                 className={`px-2.5 py-2 text-xs font-bold transition-colors ${
@@ -266,16 +494,12 @@ export default function LiveMatchPage() {
                 {t('coachModeShort')}
               </button>
             </div>
-
-            {/* CENTER: End Set — biggest, most prominent */}
             <button
               className="flex-1 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 active:scale-95 text-white font-black text-sm transition-all shadow-md shadow-orange-900/40"
               onClick={() => setShowEndSetConfirm(true)}
             >
               {t('endSet')} {currentMatch.currentSetIndex + 1}
             </button>
-
-            {/* RIGHT: Undo (small) + End Match (red text) */}
             <div className="flex-shrink-0 flex items-center gap-1.5">
               <button
                 disabled={!lastEvent}
@@ -305,65 +529,50 @@ export default function LiveMatchPage() {
             <span className="text-orange-400 text-sm font-semibold flex-1">
               {t('endSet')} {currentMatch.currentSetIndex + 1}? ({currentSet.homeScore}–{currentSet.opponentScore})
             </span>
-            <button
-              className="flex-shrink-0 py-2 px-4 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-black transition-colors"
-              onClick={handleEndSet}
-            >
+            <button className="flex-shrink-0 py-2 px-4 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-black transition-colors" onClick={handleEndSet}>
               {t('confirm')}
             </button>
-            <button
-              className="flex-shrink-0 py-2 px-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-              onClick={() => setShowEndSetConfirm(false)}
-            >
+            <button className="flex-shrink-0 py-2 px-3 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors" onClick={() => setShowEndSetConfirm(false)}>
               {t('cancel')}
             </button>
           </>
         )}
       </div>
 
-      {/* Middle content: player grid (35%) + court rotation (65%) */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-
-        {/* Player grid — fixed slice, 2×3 */}
-        <div
-          className="flex-shrink-0 p-1 grid grid-cols-2 gap-1 overflow-hidden"
-          style={{ flex: '0 0 35%', gridTemplateRows: 'repeat(3, 1fr)' }}
-        >
-          {courtPlayers.map(p => <PlayerCell key={p.id} player={p} />)}
-          {Array.from({ length: Math.max(0, 6 - courtPlayers.length) }).map((_, i) => (
-            <div key={`slot-${i}`} className="rounded-xl border border-slate-700/20 border-dashed bg-slate-800/10" />
-          ))}
-        </div>
-
-        {/* Court rotation — fills remaining space */}
-        <CourtPanel />
-
+      {/* Last event line */}
+      <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1 bg-slate-900/80 border-b border-slate-700/30 overflow-hidden" dir="rtl">
+        <span className="text-slate-600 text-[9px] flex-shrink-0">{'↳'}</span>
+        <span className="text-slate-400 text-[10px] truncate">
+          {lastEvent
+            ? [lastEventPlayerName, lastEventLabel].filter(Boolean).join(' — ')
+            : t('noEventsYet')}
+        </span>
+        {lastEvent && (
+          <span className="text-slate-600 font-mono text-[9px] flex-shrink-0 ml-auto">
+            {new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+          </span>
+        )}
       </div>
 
-      {/* Bottom nav — always visible */}
+      {/* Main content */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <UnifiedCourtAndActions />
+      </div>
+
+      {/* Bottom nav */}
       <div className="flex border-t border-slate-700 bg-slate-900 flex-shrink-0 gap-1.5 px-2 py-1.5">
-        <button
-          className="btn-3d btn-3d-nav flex-1 py-2.5 gap-1 text-sm font-semibold"
-          onClick={() => navigate(VIEWS.HOME)}
-        >
+        <button className="btn-3d btn-3d-nav flex-1 py-2.5 gap-1 text-sm font-semibold" onClick={() => navigate(VIEWS.HOME)}>
           <ArrowLeft size={16} /> {t('home')}
         </button>
-        <button
-          className="btn-3d btn-3d-blue flex-1 py-2.5 gap-1 text-sm font-semibold"
-          onClick={() => navigate(VIEWS.STATS)}
-        >
+        <button className="btn-3d btn-3d-blue flex-1 py-2.5 gap-1 text-sm font-semibold" onClick={() => navigate(VIEWS.STATS)}>
           <BarChart2 size={16} /> {t('stats')}
         </button>
-        <button
-          className="btn-3d btn-3d-nav flex-1 py-2.5 gap-1 text-sm font-semibold"
-          onClick={() => dispatch({ type: 'SHOW_HEATMAP' })}
-        >
+        <button className="btn-3d btn-3d-nav flex-1 py-2.5 gap-1 text-sm font-semibold" onClick={() => dispatch({ type: 'SHOW_HEATMAP' })}>
           <Layers size={16} /> {t('heatmap')}
         </button>
       </div>
 
-      {/* Modals */}
-      {selectedPlayerId && (appMode === 'game' ? <GameModeButtons /> : <EventButtons />)}
+      {/* Full-screen modals */}
       {showSubstitution && <SubstitutionModal onClose={() => dispatch({ type: 'HIDE_SUBSTITUTION' })} />}
       {showCourtDraw && <CourtDrawModal />}
       {showHeatmap && <HeatmapModal />}

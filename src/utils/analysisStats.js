@@ -1,7 +1,11 @@
 import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './constants';
 
 const ATTACK_ERR_TYPES = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED]);
-const ERROR_TYPES = new Set([T.SERVE_ERROR, T.ATTACK_OUT, T.ATTACK_BLOCKED, T.DEFENSE_ERROR, T.SET_ERROR, T.BLOCK_MISTAKE]);
+const ERROR_TYPES = new Set([
+  T.SERVE_ERROR, T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH,
+  T.DEFENSE_ERROR, T.SET_ERROR, T.BLOCK_MISTAKE,
+  T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR,
+]);
 const POINT_TYPES = new Set([T.ACE, T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD, T.BLOCK]);
 
 export function calcAdvancedPlayerStats(playerId, events) {
@@ -19,25 +23,28 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const blocked2nd      = blockedEvents.filter(e => e.ballNumber === 2).length;
   const blocked3rd      = blockedEvents.filter(e => e.ballNumber === 3).length;
   const blockedUnknown  = blockedEvents.filter(e => !e.ballNumber).length; // legacy, treat as 3rd
-  const totalAttackErrors = attackOut + attackBlocked;
+  const attackNetTouch  = ev.filter(e => e.type === T.ATTACK_NET_TOUCH).length;
+  const totalAttackErrors = attackOut + attackBlocked + attackNetTouch;
 
   // Ball-number–aware attempt counts include corresponding blocked attacks
   const attempts2nd = wins2nd + cont2nd + blocked2nd;
   const attempts3rd = wins3rd + cont3rd + blocked3rd + blockedUnknown;
   const totalAttackWins = wins2nd + wins3rd;
-  const totalAttackAttempts = attempts2nd + attempts3rd + attackOut;
+  const totalAttackAttempts = attempts2nd + attempts3rd + attackOut + attackNetTouch;
 
   const aces         = ev.filter(e => e.type === T.ACE).length;
   const blocks       = ev.filter(e => e.type === T.BLOCK).length;
   const blockTouches = ev.filter(e => e.type === T.BLOCK_TOUCH).length;
-  const serveErrors  = ev.filter(e => e.type === T.SERVE_ERROR).length;
-  const defenseError = ev.filter(e => e.type === T.DEFENSE_ERROR).length;
-  const setError     = ev.filter(e => e.type === T.SET_ERROR).length;
-  const blockMistake = ev.filter(e => e.type === T.BLOCK_MISTAKE).length;
-  const opponentErrs = ev.filter(e => e.type === T.OPPONENT_ERROR).length;
+  const serveErrors          = ev.filter(e => e.type === T.SERVE_ERROR).length;
+  const defenseError         = ev.filter(e => e.type === T.DEFENSE_ERROR).length;
+  const setError             = ev.filter(e => e.type === T.SET_ERROR).length;
+  const blockMistake         = ev.filter(e => e.type === T.BLOCK_MISTAKE).length;
+  const blockError           = ev.filter(e => e.type === T.BLOCK_ERROR).length;
+  const defenceLocationError = ev.filter(e => e.type === T.DEFENCE_LOCATION_ERROR).length;
+  const opponentErrs         = ev.filter(e => e.type === T.OPPONENT_ERROR).length;
 
   const totalPoints   = aces + totalAttackWins + blocks + opponentErrs;
-  const totalMistakes = serveErrors + attackOut + attackBlocked + defenseError + setError + blockMistake;
+  const totalMistakes = serveErrors + attackOut + attackBlocked + attackNetTouch + defenseError + setError + blockMistake + blockError + defenceLocationError;
 
   return {
     playerId,
@@ -50,7 +57,7 @@ export function calcAdvancedPlayerStats(playerId, events) {
     overallAttackPct: totalAttackAttempts > 0 ? Math.round(totalAttackWins / totalAttackAttempts * 100) : null,
     totalPoints, totalMistakes,
     aces, blocks, blockTouches, serveErrors,
-    defenseError, setError, blockMistake,
+    defenseError, setError, blockMistake, blockError, defenceLocationError, attackNetTouch,
   };
 }
 
@@ -219,9 +226,12 @@ export function calcContributionScore(stats) {
     stats.serveErrors +
     stats.attackOut +
     stats.attackBlocked +
+    (stats.attackNetTouch || 0) +
     (stats.defenseError || 0) +
     (stats.setError || 0) +
-    (stats.blockMistake || 0);
+    (stats.blockMistake || 0) +
+    (stats.blockError || 0) +
+    (stats.defenceLocationError || 0);
   return Math.round((pos - neg) * 10) / 10;
 }
 

@@ -206,7 +206,7 @@ function reducer(state, action) {
       return {
         ...state,
         currentMatch: updatedMatch,
-        selectedPlayerId: null,
+        // Keep selectedPlayerId so coach can quickly log another action for the same player
         showCourtDraw,
         lastScoreTeam: isHomeScore ? 'home' : isOpponentScore ? 'opponent' : null,
         pendingCourtDraw: showCourtDraw

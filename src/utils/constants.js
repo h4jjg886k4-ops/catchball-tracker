@@ -18,8 +18,9 @@ export const EVENT_TYPES = {
   ATTACK_WIN_3RD:   'attack_win_3rd',   // wins the point
   ATTACK_CONT_3RD:  'attack_cont_3rd',  // rally continues, no point
   // Attack errors (always lose the point)
-  ATTACK_OUT:       'attack_out',       // ball goes out / net / floor on own side
+  ATTACK_OUT:       'attack_out',       // ball goes out of bounds
   ATTACK_BLOCKED:   'attack_blocked',   // opponent block wins the rally
+  ATTACK_NET_TOUCH: 'attack_net_touch', // player touches the net during attack
   // Defense
   DEFENSE_SUCCESS:  'defense_success',  // successful dig / defense
   DEFENSE_ERROR:    'defense_error',    // ball drops / failed defense
@@ -29,9 +30,12 @@ export const EVENT_TYPES = {
   SET_SUCCESS:      'set_success',      // clean set
   SET_ERROR:        'set_error',        // illegal / out / missed set
   // Other
-  BLOCK:            'block',            // own team blocks opponent → point
-  OPPONENT_ERROR:   'opponent_error',   // opponent mistake gives us a point
-  FREE_BALL:        'free_ball',        // free ball received, rally continues
+  BLOCK:                    'block',                    // own team blocks opponent → point
+  OPPONENT_ERROR:           'opponent_error',           // opponent mistake gives us a point
+  FREE_BALL:                'free_ball',                // free ball received, rally continues
+  // Defence coaching events (no point, neutral — track position mistakes)
+  BLOCK_ERROR:              'block_error',              // wrong blocking position
+  DEFENCE_LOCATION_ERROR:   'defence_location_error',  // wrong defensive position
 };
 
 const T = EVENT_TYPES;
@@ -50,6 +54,7 @@ export const OPPONENT_SCORE_EVENTS = new Set([
   T.SERVE_ERROR,
   T.ATTACK_OUT,
   T.ATTACK_BLOCKED,
+  T.ATTACK_NET_TOUCH,
   T.DEFENSE_ERROR,
   T.SET_ERROR,
 ]);
@@ -57,6 +62,7 @@ export const OPPONENT_SCORE_EVENTS = new Set([
 // Events that trigger the court attack drawing popup (opponent scored via an attack we could have defended)
 export const COURT_DRAW_EVENTS = new Set([
   T.ATTACK_BLOCKED,
+  T.ATTACK_NET_TOUCH,
   T.SET_ERROR,
   T.BLOCK_MISTAKE,
 ]);
@@ -71,6 +77,8 @@ export const NEUTRAL_EVENTS = new Set([
   T.FREE_BALL,
   T.BLOCK_TOUCH,
   T.BLOCK_MISTAKE,
+  T.BLOCK_ERROR,
+  T.DEFENCE_LOCATION_ERROR,
 ]);
 
 /**
@@ -90,6 +98,7 @@ export const EVENT_CONFIG = [
   { type: T.ATTACK_CONT_3RD,  label: 'Continue – 3rd',   emoji: '↩️', score: null, color: 'blue',  category: 'attack' },
   { type: T.ATTACK_OUT,       label: 'Attack Out',        emoji: '💥', score: '-1', color: 'red',   category: 'attack' },
   { type: T.ATTACK_BLOCKED,   label: 'Blocked',           emoji: '🛑', score: '-1', color: 'red',   category: 'attack' },
+  { type: T.ATTACK_NET_TOUCH, label: 'Net Touch',         emoji: '🕸️', score: '-1', color: 'red',   category: 'attack' },
   // ── DEFENSE ────────────────────────────────────────────────────────
   { type: T.BLOCK_TOUCH,      label: 'Block Touch',      emoji: '🖐️', score: null, color: 'blue',  category: 'defense' },
   { type: T.BLOCK_MISTAKE,    label: 'Blocking Mistake', emoji: '🚫', score: null, color: 'slate', category: 'defense' },
@@ -98,9 +107,12 @@ export const EVENT_CONFIG = [
   { type: T.SET_SUCCESS,      label: 'Successful Set',   emoji: '🙌', score: null, color: 'blue',  category: 'setting' },
   { type: T.SET_ERROR,        label: 'Setting Error',    emoji: '🔴', score: '-1', color: 'red',   category: 'setting' },
   // ── OTHER ──────────────────────────────────────────────────────────
-  { type: T.BLOCK,            label: 'Block',            emoji: '🛡️', score: '+1', color: 'green', category: 'other' },
-  { type: T.OPPONENT_ERROR,   label: 'Opponent Error',   emoji: '🎁', score: '+1', color: 'green', category: 'other' },
-  { type: T.FREE_BALL,        label: 'Free Ball',        emoji: '🏐', score: null, color: 'slate', category: 'other' },
+  { type: T.BLOCK,                   label: 'Block',                   emoji: '🛡️', score: '+1', color: 'green', category: 'other' },
+  { type: T.OPPONENT_ERROR,          label: 'Opponent Error',           emoji: '🎁', score: '+1', color: 'green', category: 'other' },
+  { type: T.FREE_BALL,               label: 'Free Ball',                emoji: '🏐', score: null, color: 'slate', category: 'other' },
+  // Defence coaching events (neutral, no scoring)
+  { type: T.BLOCK_ERROR,             label: 'Block Error',              emoji: '🚧', score: null, color: 'red',   category: 'defense' },
+  { type: T.DEFENCE_LOCATION_ERROR,  label: 'Defence Location Error',   emoji: '📍', score: null, color: 'red',   category: 'defense' },
 ];
 
 export const POSITIONS = {

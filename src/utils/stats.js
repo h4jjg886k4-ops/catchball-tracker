@@ -2,7 +2,7 @@ import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './co
 
 const ATTACK_WIN_TYPES  = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD]);
 const ATTACK_CONT_TYPES = new Set([T.ATTACK_CONT_2ND, T.ATTACK_CONT_3RD]);
-const ATTACK_ERR_TYPES  = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED]);
+const ATTACK_ERR_TYPES  = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH]);
 const ALL_ATTACK_TYPES  = new Set([...ATTACK_WIN_TYPES, ...ATTACK_CONT_TYPES, ...ATTACK_ERR_TYPES]);
 const SERVE_TYPES       = new Set([T.ACE, T.SERVE_IN, T.SERVE_ERROR]);
 const DEFENSE_TYPES     = new Set([T.DEFENSE_SUCCESS, T.DEFENSE_ERROR]);
@@ -55,17 +55,20 @@ export function calcPlayerStats(playerId, events) {
     ? Math.round(setSuccess / setTotal * 100)
     : null;
 
-  const blockMistakes = ev.filter(e => e.type === T.BLOCK_MISTAKE).length;
+  const blockMistakes          = ev.filter(e => e.type === T.BLOCK_MISTAKE).length;
+  const blockErrors            = ev.filter(e => e.type === T.BLOCK_ERROR).length;
+  const defenceLocationErrors  = ev.filter(e => e.type === T.DEFENCE_LOCATION_ERROR).length;
+  const attackNetTouch         = ev.filter(e => e.type === T.ATTACK_NET_TOUCH).length;
 
   const points = aces + attackKills + blocks +
     ev.filter(e => e.type === T.OPPONENT_ERROR).length;
 
-  const errors = serveErrors + attackOut + attackBlocked + defenseError + setError;
+  const errors = serveErrors + attackOut + attackBlocked + attackNetTouch + defenseError + setError + blockErrors + defenceLocationErrors;
 
   // Card display stats (live match player grid)
-  const cardPoints   = aces + attackKills + blocks;                   // direct-point actions only
-  const cardAttacks  = attackTotal;                                   // all attack touches
-  const cardMistakes = serveErrors + defenseError + setError + blockMistakes; // non-attack errors
+  const cardPoints   = aces + attackKills + blocks;
+  const cardAttacks  = attackTotal;
+  const cardMistakes = serveErrors + defenseError + setError + blockMistakes + blockErrors + defenceLocationErrors;
 
   return {
     playerId,
