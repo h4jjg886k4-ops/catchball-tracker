@@ -222,13 +222,19 @@ export default function LiveMatchPage() {
                 // Undo button only for non-substitution events
                 const isLastUndoable = !isSub && reversed.find(e => !e.isSubstitution) === ev;
 
+                const scoreStr = (ev.homeScore != null && ev.opponentScore != null)
+                  ? `${ev.homeScore}-${ev.opponentScore}` : null;
+
                 return (
                   <div
                     key={ev.id ?? idx}
                     className={`flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/80 ${isLast ? 'bg-slate-800/40' : ''} ${isSub ? 'bg-blue-950/20' : ''}`}
                   >
-                    {/* Time */}
-                    <span className="text-[10px] text-slate-600 font-mono flex-shrink-0 w-14">{timeStr}</span>
+                    {/* Time + score */}
+                    <div className="flex flex-col items-start flex-shrink-0 w-14 gap-px">
+                      <span className="text-[10px] text-slate-600 font-mono leading-none">{timeStr}</span>
+                      {scoreStr && <span className="text-[10px] text-slate-400 font-mono font-semibold leading-none">{scoreStr}</span>}
+                    </div>
                     {/* Emoji */}
                     <span className="text-base flex-shrink-0">{conf?.emoji ?? '•'}</span>
                     {/* Label + player/sub line */}
@@ -664,7 +670,8 @@ export default function LiveMatchPage() {
         {/* Timestamp */}
         {lastEvent && (
           <span className="text-slate-600 font-mono text-[9px] flex-shrink-0">
-            {new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}
+            {new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+            {lastEvent.homeScore != null ? ` · ${lastEvent.homeScore}-${lastEvent.opponentScore}` : ''}
           </span>
         )}
       </div>
