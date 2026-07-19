@@ -388,4 +388,5 @@ export const EVENT_TYPE_I18N_KEY = {
   block_error:              'blockError',
   defence_location_error:   'defenceLocationError',
   attack_net_touch:         'attackNetTouch',
+  substitution:             'substitution',
 };

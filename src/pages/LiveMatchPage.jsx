@@ -193,10 +193,8 @@ export default function LiveMatchPage() {
             ) : (
               reversed.map((ev, idx) => {
                 const isLast = idx === 0;
-                const evPlayer = players.find(p => p.id === ev.playerId);
-                const conf  = EVENT_CONFIG.find(c => c.type === ev.type);
-                const label = conf && EVENT_TYPE_I18N_KEY[conf.type]
-                  ? t(EVENT_TYPE_I18N_KEY[conf.type]) : conf?.label ?? ev.type;
+                const isSub  = ev.isSubstitution === true;
+                const conf   = EVENT_CONFIG.find(c => c.type === ev.type);
                 const isHome = HOME_SCORE_EVENTS.has(ev.type);
                 const isOpp  = OPPONENT_SCORE_EVENTS.has(ev.type);
                 const scoreColor = isHome ? 'text-green-400' : isOpp ? 'text-red-400' : 'text-slate-600';
@@ -205,30 +203,47 @@ export default function LiveMatchPage() {
                   hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
                 });
 
+                // Substitution entry: show "Sub: out → in" instead of generic label
+                let label, subLine;
+                if (isSub) {
+                  label = t('substitution');
+                  const pOut = players.find(p => p.id === ev.outPlayerId);
+                  const pIn  = players.find(p => p.id === ev.inPlayerId);
+                  subLine = [pOut, pIn].filter(Boolean)
+                    .map(p => `#${p.number} ${p.name.split(' ')[0]}`)
+                    .join(' → ');
+                } else {
+                  const evPlayer = players.find(p => p.id === ev.playerId);
+                  label = conf && EVENT_TYPE_I18N_KEY[conf.type]
+                    ? t(EVENT_TYPE_I18N_KEY[conf.type]) : conf?.label ?? ev.type;
+                  subLine = evPlayer ? `#${evPlayer.number} ${evPlayer.name}` : null;
+                }
+
+                // Undo button only for non-substitution events
+                const isLastUndoable = !isSub && reversed.find(e => !e.isSubstitution) === ev;
+
                 return (
                   <div
                     key={ev.id ?? idx}
-                    className={`flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/80 ${isLast ? 'bg-slate-800/40' : ''}`}
+                    className={`flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/80 ${isLast ? 'bg-slate-800/40' : ''} ${isSub ? 'bg-blue-950/20' : ''}`}
                   >
                     {/* Time */}
                     <span className="text-[10px] text-slate-600 font-mono flex-shrink-0 w-14">{timeStr}</span>
                     {/* Emoji */}
                     <span className="text-base flex-shrink-0">{conf?.emoji ?? '•'}</span>
-                    {/* Label + player */}
+                    {/* Label + player/sub line */}
                     <div className="flex-1 min-w-0">
-                      <div className="text-[11px] font-semibold text-slate-200 truncate">{label}</div>
-                      {evPlayer && (
-                        <div className="text-[10px] text-slate-500 truncate">
-                          #{evPlayer.number} {evPlayer.name}
-                        </div>
+                      <div className={`text-[11px] font-semibold truncate ${isSub ? 'text-blue-300' : 'text-slate-200'}`}>{label}</div>
+                      {subLine && (
+                        <div className="text-[10px] text-slate-500 truncate">{subLine}</div>
                       )}
                     </div>
                     {/* Score badge */}
                     <span className={`text-[10px] font-black flex-shrink-0 w-5 text-right ${scoreColor}`}>
                       {scoreMark}
                     </span>
-                    {/* Undo — only for the most recent event */}
-                    {isLast && (
+                    {/* Undo — only for the most recent non-substitution event */}
+                    {isLastUndoable && (
                       <button
                         className="flex-shrink-0 flex items-center gap-0.5 px-2 py-1 rounded-lg border border-amber-700/60 bg-amber-900/30 text-amber-400 text-[10px] font-semibold hover:bg-amber-900/60 transition-colors active:scale-95"
                         onClick={() => {

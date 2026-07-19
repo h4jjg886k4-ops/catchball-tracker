@@ -259,13 +259,31 @@ function reducer(state, action) {
       const match = state.currentMatch;
       const setIndex = match.currentSetIndex;
       const currentSet = match.sets[setIndex];
+      const now = Date.now();
       const sub = {
-        id: uuidv4(), timestamp: Date.now(), outPlayerId, inPlayerId,
+        id: uuidv4(), timestamp: now, outPlayerId, inPlayerId,
         homeScore: currentSet.homeScore, opponentScore: currentSet.opponentScore,
+      };
+      // Log a meta event into events[] so the event log shows the substitution
+      const subEvent = {
+        id: uuidv4(),
+        type: 'substitution',
+        isSubstitution: true,  // flag so UNDO_LAST_EVENT skips it
+        playerId: inPlayerId,
+        outPlayerId,
+        inPlayerId,
+        timestamp: now,
+        homeScore: currentSet.homeScore,
+        opponentScore: currentSet.opponentScore,
       };
       // Also update rotation so the court grid immediately shows the incoming player
       const newRotation = currentSet.rotation.map(id => id === outPlayerId ? inPlayerId : id);
-      const updatedSet = { ...currentSet, substitutions: [...currentSet.substitutions, sub], rotation: newRotation };
+      const updatedSet = {
+        ...currentSet,
+        substitutions: [...currentSet.substitutions, sub],
+        events: [...currentSet.events, subEvent],
+        rotation: newRotation,
+      };
       const updatedSets = [...match.sets];
       updatedSets[setIndex] = updatedSet;
       return { ...state, currentMatch: { ...match, sets: updatedSets }, showSubstitution: false };
@@ -485,8 +503,11 @@ function reducer(state, action) {
       const setIndex = match.currentSetIndex;
       const currentSet = match.sets[setIndex];
       if (!currentSet.events.length) return state;
-      const removedEvent = currentSet.events[currentSet.events.length - 1];
-      const events = currentSet.events.slice(0, -1);
+      // Skip substitution meta-events — they cannot be undone (rotation already applied)
+      const lastUndoable = [...currentSet.events].reverse().find(e => !e.isSubstitution);
+      if (!lastUndoable) return state;
+      const removedEvent = lastUndoable;
+      const events = currentSet.events.filter(e => e.id !== lastUndoable.id);
       const prevEvent = events[events.length - 1];
       const newHomeScore     = prevEvent ? prevEvent.homeScore     : 0;
       const newOpponentScore = prevEvent ? prevEvent.opponentScore : 0;

@@ -36,6 +36,8 @@ export const EVENT_TYPES = {
   // Defence coaching events (no point, neutral — track position mistakes)
   BLOCK_ERROR:              'block_error',              // wrong blocking position
   DEFENCE_LOCATION_ERROR:   'defence_location_error',  // wrong defensive position
+  // Meta event — recorded to events[] for the log, but never affects score or stats
+  SUBSTITUTION:             'substitution',
 };
 
 const T = EVENT_TYPES;
@@ -79,6 +81,7 @@ export const NEUTRAL_EVENTS = new Set([
   T.BLOCK_MISTAKE,
   T.BLOCK_ERROR,
   T.DEFENCE_LOCATION_ERROR,
+  T.SUBSTITUTION,
 ]);
 
 /**
@@ -113,6 +116,8 @@ export const EVENT_CONFIG = [
   // Defence coaching events (neutral, no scoring)
   { type: T.BLOCK_ERROR,             label: 'Block Error',              emoji: '🚧', score: null, color: 'red',   category: 'defense' },
   { type: T.DEFENCE_LOCATION_ERROR,  label: 'Defence Location Error',   emoji: '📍', score: null, color: 'red',   category: 'defense' },
+  // Meta — substitution log entry (no scoring, not undoable)
+  { type: T.SUBSTITUTION,            label: 'Substitution',             emoji: '🔄', score: null, color: 'slate', category: 'other' },
 ];
 
 export const POSITIONS = {
