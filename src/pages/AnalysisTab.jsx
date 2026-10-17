@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useMatch } from '../context/MatchContext';
 import {
   Brain, TrendingUp, AlertTriangle, Award, ChevronDown, ChevronUp,
-  RefreshCw, Loader2, Zap, Sparkles,
+  RefreshCw, Loader2, Zap, Sparkles, Shield, MapPin,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -13,6 +13,7 @@ import {
   calcMomentum, calcClutchStats, calcErrorByGameState,
   buildScoreTimeline, fetchAIInsights,
   calcServeEfficiency, calcContributionScore, detectMomentumShifts,
+  calcFrontRowCombos, calcBlockingZoneStats,
 } from '../utils/analysisStats';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
@@ -616,6 +617,188 @@ function ErrorAnalysisSection({ playerAdvancedList, errorStateMap, t }) {
   );
 }
 
+// ── Front Row Combination Analysis ────────────────────────────────────────────
+function FrontRowComboSection({ combos, t }) {
+  if (!combos.length) {
+    return (
+      <Card>
+        <SectionHeader title={t('frontRowAnalysis')} icon={Shield} />
+        <div className="p-4 text-slate-500 text-sm text-center">{t('noFrontRowData')}</div>
+      </Card>
+    );
+  }
+
+  const sorted = [...combos].sort((a, b) => {
+    if (a.attackPct === null) return 1;
+    if (b.attackPct === null) return -1;
+    return b.attackPct - a.attackPct;
+  });
+
+  const eligible = sorted.filter(c => c.rallies > 2);
+  const bestKey  = eligible[0]?.names.join('|') ?? null;
+  const worstKey = eligible.length > 1 ? eligible[eligible.length - 1].names.join('|') : null;
+
+  return (
+    <Card>
+      <SectionHeader title={t('frontRowAnalysis')} icon={Shield} />
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-400 font-semibold text-xs">{t('frontRowCombo')}</th>
+              <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('attackPctCol')}</th>
+              <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('blockPctCol')}</th>
+              <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('ralliesCol')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((c, i) => {
+              const key = c.names.join('|');
+              const isBest  = key === bestKey;
+              const isWorst = key === worstKey;
+              const isSmall = c.rallies <= 2;
+              return (
+                <tr key={i} className={`border-b border-slate-700/50 ${
+                  isBest ? 'bg-green-900/20' : isWorst ? 'bg-red-900/20' : ''
+                }`}>
+                  <td className="px-3 py-2">
+                    <div className="text-white text-xs font-medium">{c.names.join(' + ')}</div>
+                    {isSmall && (
+                      <div className="text-yellow-500 text-[10px] flex items-center gap-1 mt-0.5">
+                        <AlertTriangle size={10} /> {t('smallSample')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-center px-2 py-2">
+                    <span className={`font-bold text-xs ${isBest ? 'text-green-400' : isWorst ? 'text-red-400' : 'text-slate-300'}`}>
+                      {pctStr(c.attackPct, c.attackWins, c.attackAttempts)}
+                    </span>
+                  </td>
+                  <td className="text-center px-2 py-2 text-slate-300 text-xs">
+                    {pctStr(c.blockStopPct, c.blockStopped, c.blockAttempts)}
+                  </td>
+                  <td className="text-center px-2 py-2 text-slate-400 text-xs tabular-nums">{c.rallies}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ── Blocking Zone Weakness Analysis ───────────────────────────────────────────
+const ZONE_LABEL_KEYS = {
+  antennaLeft:  'antennaLeft',
+  zone43:       'zone43',
+  center:       'centerZone',
+  zone32:       'zone32',
+  antennaRight: 'antennaRight',
+};
+
+function zoneSeverityClasses(sharePct, count) {
+  if (count === 0) return 'bg-slate-700/30 text-slate-500 border-slate-700';
+  if (sharePct >= 30) return 'bg-red-900/40 text-red-300 border-red-700/50';
+  if (sharePct >= 15) return 'bg-orange-900/40 text-orange-300 border-orange-700/50';
+  return 'bg-green-900/30 text-green-300 border-green-700/50';
+}
+
+function BlockingZoneSection({ zoneStats, combos, t }) {
+  const { zones, totalScored } = zoneStats;
+
+  if (!totalScored) {
+    return (
+      <Card>
+        <SectionHeader title={t('blockingZoneAnalysis')} icon={MapPin} />
+        <div className="p-4 text-slate-500 text-sm text-center">{t('noBlockingZoneData')}</div>
+      </Card>
+    );
+  }
+
+  const worst = [...zones].sort((a, b) => b.sharePct - a.sharePct)[0];
+  const comboTotals = Object.fromEntries(combos.map(c => [c.names.join('|'), c.blockScoredAgainst]));
+
+  return (
+    <Card>
+      <SectionHeader title={t('blockingZoneAnalysis')} icon={MapPin} />
+
+      {/* Visual court diagram — physical layout, always LTR */}
+      <div className="p-3">
+        <div className="flex items-center gap-1.5 mb-2" dir="ltr">
+          <div className="flex-1 h-0.5 bg-yellow-500/50 rounded" />
+          <span className="text-[9px] font-bold text-yellow-500/70 tracking-widest uppercase">{t('netLabel')}</span>
+          <div className="flex-1 h-0.5 bg-yellow-500/50 rounded" />
+        </div>
+        <div className="grid grid-cols-5 gap-1.5" dir="ltr">
+          {zones.map(z => (
+            <div key={z.zoneId} className={`rounded-lg border px-1 py-2.5 text-center ${zoneSeverityClasses(z.sharePct, z.count)}`}>
+              <div className="text-[9px] font-semibold leading-tight">{t(ZONE_LABEL_KEYS[z.zoneId])}</div>
+              <div className="font-black text-lg tabular-nums mt-1">{z.count}</div>
+              <div className="text-[9px] opacity-80">{z.sharePct}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto border-t border-slate-700">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-400 font-semibold text-xs">{t('zoneCol')}</th>
+              <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('scoredCol')}</th>
+              <th className="text-center px-2 py-2 text-slate-400 font-semibold text-xs">{t('shareCol')}</th>
+              <th className="text-left px-2 py-2 text-slate-400 font-semibold text-xs">{t('frontRowCombo')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {zones.map(z => (
+              <tr key={z.zoneId} className="border-b border-slate-700/50">
+                <td className="px-3 py-2 text-white text-xs">{t(ZONE_LABEL_KEYS[z.zoneId])}</td>
+                <td className="text-center px-2 py-2 text-red-400 font-bold">{z.count}</td>
+                <td className="text-center px-2 py-2 text-slate-300 text-xs">{z.sharePct}%</td>
+                <td className="px-2 py-2 text-slate-400 text-xs">
+                  {z.topCombo ? `${z.topCombo.names.join(' + ')} (${z.topCombo.count}×)` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Insights */}
+      {worst && worst.count > 0 && (
+        <div className="mx-4 mb-3 mt-3 px-3 py-2.5 bg-red-950/40 border border-red-800/40 rounded-xl space-y-1.5">
+          <p className="text-red-300 text-xs leading-relaxed">
+            {t('weakestZoneInsightTpl', {
+              zone: t(ZONE_LABEL_KEYS[worst.zoneId]),
+              pct: worst.sharePct,
+              count: worst.count,
+              total: totalScored,
+            })}
+          </p>
+          {worst.topCombo && (() => {
+            const comboTotal = comboTotals[worst.topCombo.names.join('|')] || worst.topCombo.count;
+            return (
+              <p className="text-red-300/80 text-xs leading-relaxed">
+                {t('zoneComboInsightTpl', {
+                  names: worst.topCombo.names.join(' + '),
+                  zone: t(ZONE_LABEL_KEYS[worst.zoneId]),
+                  count: worst.topCombo.count,
+                  total: comboTotal,
+                  pct: Math.round(worst.topCombo.count / comboTotal * 100),
+                })}
+              </p>
+            );
+          })()}
+        </div>
+      )}
+      <div className="px-4 pb-3 text-slate-600 text-[10px]">{t('blockingZoneMethodNote')}</div>
+    </Card>
+  );
+}
+
 // ── Team Statistics ───────────────────────────────────────────────────────────
 function TeamStatistics({ teamStats, t }) {
   const items = [
@@ -907,6 +1090,9 @@ export default function AnalysisTab({ currentMatch, t }) {
     return m;
   }, [players, filteredEvents]);
 
+  const frontRowCombos  = useMemo(() => calcFrontRowCombos(players, filteredEvents), [players, filteredEvents]);
+  const blockingZoneStats = useMemo(() => calcBlockingZoneStats(filteredSets, players), [filteredSets, players]);
+
   // ── AI insights ─────────────────────────────────────────────────────────────
   const setKey = selectedSetIdx === null ? 'all' : String(selectedSetIdx);
 
@@ -1047,16 +1233,22 @@ export default function AnalysisTab({ currentMatch, t }) {
         t={t}
       />
 
-      {/* 10. Team Statistics */}
+      {/* 10. Front Row Combination Analysis */}
+      <FrontRowComboSection combos={frontRowCombos} t={t} />
+
+      {/* 11. Blocking Zone Weakness Analysis */}
+      <BlockingZoneSection zoneStats={blockingZoneStats} combos={frontRowCombos} t={t} />
+
+      {/* 12. Team Statistics */}
       <TeamStatistics teamStats={teamStats} t={t} />
 
-      {/* 11. Error Breakdown */}
+      {/* 13. Error Breakdown */}
       <ErrorBreakdownChart allEvents={filteredEvents} t={t} />
 
-      {/* 12. Detailed Player Stats */}
+      {/* 14. Detailed Player Stats */}
       <DetailedPlayerStats playerAdvancedList={playerAdvancedList} players={players} t={t} />
 
-      {/* 13. Full Event Log */}
+      {/* 15. Full Event Log */}
       <EventLogSection currentMatch={currentMatch} players={players} t={t} />
 
     </div>

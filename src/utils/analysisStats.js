@@ -264,6 +264,128 @@ export function detectMomentumShifts(sets, minRun = 3) {
   return result;
 }
 
+// ── Front row combination analysis ────────────────────────────────────────────
+// Front row = positions P2/P3/P4 = indices 1,2,3 of rotationSnapshot (see RotationView.jsx).
+const FRONT_ROW_INDICES = [1, 2, 3];
+
+const ATTACK_ATTEMPT_TYPES = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD, T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH]);
+const ATTACK_WIN_TYPES     = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD]);
+// Block-attributable outcomes vs. an opponent attack: we stopped it (BLOCK) or the opponent
+// scored because of a block/defensive-position mistake (BLOCK_ERROR / DEFENCE_LOCATION_ERROR).
+const BLOCK_OUTCOME_TYPES   = new Set([T.BLOCK, T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR]);
+const BLOCK_SCORED_AGAINST_TYPES = new Set([T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR]);
+const RALLY_END_TYPES = new Set([...HOME_SCORE_EVENTS, ...OPPONENT_SCORE_EVENTS]);
+
+function frontRowIds(rotationSnapshot) {
+  if (!Array.isArray(rotationSnapshot)) return null;
+  const ids = FRONT_ROW_INDICES.map(i => rotationSnapshot[i]);
+  return ids.every(Boolean) ? ids : null;
+}
+
+function comboKey(ids) {
+  return ids.slice().sort().join('|');
+}
+
+function comboNames(ids, playerMap) {
+  return ids.map(id => playerMap[id]?.name || '?').sort((a, b) => a.localeCompare(b));
+}
+
+// Returns one row per unique trio of front-row players seen in `events`, with attack
+// effectiveness, block effectiveness, and total rallies played at the net.
+export function calcFrontRowCombos(players, events) {
+  const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
+  const combos = {};
+
+  for (const ev of events) {
+    const ids = frontRowIds(ev.rotationSnapshot);
+    if (!ids) continue;
+    const key = comboKey(ids);
+    if (!combos[key]) {
+      combos[key] = { ids, attackAttempts: 0, attackWins: 0, blockAttempts: 0, blockScoredAgainst: 0, rallies: 0 };
+    }
+    const c = combos[key];
+    if (ATTACK_ATTEMPT_TYPES.has(ev.type)) {
+      c.attackAttempts++;
+      if (ATTACK_WIN_TYPES.has(ev.type)) c.attackWins++;
+    }
+    if (BLOCK_OUTCOME_TYPES.has(ev.type)) {
+      c.blockAttempts++;
+      if (BLOCK_SCORED_AGAINST_TYPES.has(ev.type)) c.blockScoredAgainst++;
+    }
+    if (RALLY_END_TYPES.has(ev.type)) c.rallies++;
+  }
+
+  return Object.values(combos).map(c => ({
+    names: comboNames(c.ids, playerMap),
+    attackAttempts: c.attackAttempts,
+    attackWins: c.attackWins,
+    attackPct: c.attackAttempts > 0 ? Math.round(c.attackWins / c.attackAttempts * 100) : null,
+    blockAttempts: c.blockAttempts,
+    blockScoredAgainst: c.blockScoredAgainst,
+    blockStopped: c.blockAttempts - c.blockScoredAgainst,
+    blockStopPct: c.blockAttempts > 0 ? Math.round((c.blockAttempts - c.blockScoredAgainst) / c.blockAttempts * 100) : null,
+    rallies: c.rallies,
+  }));
+}
+
+// ── Blocking zone weakness analysis ───────────────────────────────────────────
+// Opponent attacks that beat our block/defensive positioning (block_error, defence_location_error)
+// are the only events that both (a) score for the opponent and (b) carry a court drawing with a
+// startPoint — so they're the only ones we can attribute to a court zone.
+const ZONE_IDS = ['antennaLeft', 'zone43', 'center', 'zone32', 'antennaRight'];
+
+function zoneForX(x) {
+  if (x < 0.2) return 'antennaLeft';
+  if (x < 0.4) return 'zone43';
+  if (x < 0.6) return 'center';
+  if (x < 0.8) return 'zone32';
+  return 'antennaRight';
+}
+
+// Returns { zones: [{zoneId, count, sharePct, topCombo}], totalScored }
+export function calcBlockingZoneStats(sets, players) {
+  const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
+  const byZone = {};
+  ZONE_IDS.forEach(id => { byZone[id] = { count: 0, comboCounts: {} }; });
+  let totalScored = 0;
+
+  for (const set of sets) {
+    const drawings = set.attackDrawings || [];
+    const triggerEvents = (set.events || []).filter(e => e.type === T.BLOCK_ERROR || e.type === T.DEFENCE_LOCATION_ERROR);
+    for (const drawing of drawings) {
+      const triggerEvent = triggerEvents.find(e => e.timestamp === drawing.timestamp);
+      if (!triggerEvent) continue; // drawing came from a different trigger (our own attack error)
+      const startPt = drawing.paths?.[0]?.points?.[0];
+      if (!startPt) continue;
+
+      const zoneId = zoneForX(startPt.x);
+      byZone[zoneId].count++;
+      totalScored++;
+
+      const ids = frontRowIds(triggerEvent.rotationSnapshot);
+      if (ids) {
+        const key = comboKey(ids);
+        byZone[zoneId].comboCounts[key] = (byZone[zoneId].comboCounts[key] || 0) + 1;
+      }
+    }
+  }
+
+  const zones = ZONE_IDS.map(zoneId => {
+    const z = byZone[zoneId];
+    const topComboEntry = Object.entries(z.comboCounts).sort((a, b) => b[1] - a[1])[0];
+    return {
+      zoneId,
+      count: z.count,
+      sharePct: totalScored > 0 ? Math.round(z.count / totalScored * 100) : 0,
+      topCombo: topComboEntry
+        ? { names: comboNames(topComboEntry[0].split('|'), playerMap), count: topComboEntry[1] }
+        : null,
+    };
+  });
+
+  return { zones, totalScored };
+}
+
 export async function fetchAIInsights(analysisData) {
   const { homeTeam, opponentTeam, team, playersSummary, momentum, clutchStats, errorStats } = analysisData;
 

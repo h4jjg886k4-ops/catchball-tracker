@@ -344,6 +344,33 @@ export const translations = {
   blockMistakeNoPts:    { en: 'Blocking mistakes do not directly give the opponent a point', he: 'טעויות חסימה לא מעניקות ישירות נקודה ליריב' },
   errorInsightTpl:      { en: '{type} — {count}× ({pct}% of all errors)', he: '{type} — {count} פעמים ({pct}% מכלל השגיאות)' },
 
+  // ── Front row combination analysis ────────────────────────────────────────
+  frontRowAnalysis:        { en: 'Front Row Analysis',        he: 'ניתוח קו קדמי' },
+  frontRowCombo:           { en: 'Combination',               he: 'שילוב' },
+  attackPctCol:            { en: 'Attack %',                  he: '% התקפה' },
+  blockPctCol:              { en: 'Block %',                   he: '% חסימה' },
+  ralliesCol:              { en: 'Rallies',                   he: 'קרבות' },
+  blockStoppedTpl:         { en: 'Stopped {pct}% of opponent attacks ({stopped}/{total})', he: 'חסמה/עצרה {pct}% מהתקפות היריב ({stopped}/{total})' },
+  smallSample:             { en: 'Small sample',               he: 'מדגם קטן' },
+  noFrontRowData:          { en: 'No front row rotation data recorded yet.', he: 'אין עדיין נתוני רוטציה לקו קדמי.' },
+
+  // ── Blocking zone weakness analysis ───────────────────────────────────────
+  blockingZoneAnalysis:    { en: 'Blocking Zone Analysis',     he: 'ניתוח אזורי חסימה' },
+  antennaLeft:             { en: 'Antenna Left',               he: 'אנטנה שמאל' },
+  zone43:                  { en: 'Zone 4-3',                   he: 'אזור 4-3' },
+  centerZone:              { en: 'Center',                     he: 'מרכז' },
+  zone32:                  { en: 'Zone 3-2',                   he: 'אזור 3-2' },
+  antennaRight:            { en: 'Antenna Right',               he: 'אנטנה ימין' },
+  zoneCol:                 { en: 'Zone',                        he: 'אזור' },
+  scoredCol:               { en: 'Opponent Scores',             he: 'הבקעות יריב' },
+  shareCol:                { en: 'Share of Losses',             he: 'נתח מהפסדים' },
+  blockingLossesFrom:      { en: '{count} opponent scores from this zone', he: '{count} הבקעות יריב מהאזור הזה' },
+  defendedByTpl:           { en: 'Mostly defended by {names} ({count}×)', he: 'הוגן בעיקר ע״י {names} ({count} פעמים)' },
+  weakestZoneInsightTpl:   { en: '{zone} is your weakest zone — {pct}% of opponent scores against the block came from there ({count}/{total})', he: '{zone} הוא האזור החלש ביותר — {pct}% מהבקעות היריב מול החסימה הגיעו משם ({count}/{total})' },
+  zoneComboInsightTpl:     { en: 'When {names} were at net, {zone} accounted for {count} of their {total} blocking losses ({pct}%)', he: 'כאשר {names} היו ברשת, {zone} היה אחראי ל-{count} מתוך {total} הפסדי החסימה שלהן ({pct}%)' },
+  noBlockingZoneData:      { en: 'No opponent attacks with recorded court drawings yet.', he: 'אין עדיין התקפות יריב עם סימון מגרש.' },
+  blockingZoneMethodNote:  { en: 'Based on recorded block-error / defensive-position-error drawings — only attacks that scored are mapped to a zone.', he: 'מבוסס על סימוני מגרש של טעויות חסימה/מיקום הגנה — רק התקפות שהבקיעו ממופות לאזור.' },
+
   // ── Serve setup ──────────────────────────────────────────────────────────
   whoServesFirst:      { en: 'Who serves first?',      he: 'מי מגיש ראשון?' },
   myTeam:              { en: 'My Team',                he: 'הקבוצה שלי' },
