@@ -253,6 +253,7 @@ export default function HeatmapModal() {
   const blockingDrawings = currentSet?.blockingDrawings || [];
 
   const activeDrawings = activeTab === 'attacks' ? attackDrawings : blockingDrawings;
+  const taggedErrorCount = activeDrawings.reduce((n, d) => n + (d.playerErrors?.length || 0), 0);
 
   const attackLabels   = { top: t('courtOpponentAttacks'), bottom: t('courtHomeDefense') };
   const blockingLabels = { top: t('courtBlockingMistakes'), bottom: t('courtBlockingPosition') };
@@ -298,6 +299,11 @@ export default function HeatmapModal() {
           <div className="text-white font-bold">{t('attackHeatmap')} — {t('setLabel')} {setIndex + 1}</div>
           <div className="text-slate-400 text-xs mt-0.5">
             {t(countKey, { n: activeDrawings.length })}
+            {taggedErrorCount > 0 && (
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-red-900/60 border border-red-700 text-red-200 font-semibold">
+                {t('playerErrorsTagged', { n: taggedErrorCount })}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -354,8 +360,16 @@ export default function HeatmapModal() {
 
           <div className="flex gap-2 px-3 pb-2 overflow-x-auto flex-shrink-0">
             {activeDrawings.map((d, i) => (
-              <div key={d.id} className="flex-shrink-0 text-center">
+              <div key={d.id} className="relative flex-shrink-0 text-center">
                 <div className="text-slate-500 text-[10px] mb-0.5">#{i + 1}</div>
+                {d.playerErrors?.length > 0 && (
+                  <span
+                    className="absolute top-3 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 border border-white text-white text-[10px] font-bold flex items-center justify-center"
+                    title={t('playerErrorsTagged', { n: d.playerErrors.length })}
+                  >
+                    {d.playerErrors.length}
+                  </span>
+                )}
                 {d.imageData ? (
                   <img
                     src={d.imageData}

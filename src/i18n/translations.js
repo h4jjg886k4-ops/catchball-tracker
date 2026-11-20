@@ -218,6 +218,12 @@ export const translations = {
   flipCourt:           { en: 'Flip court',        he: 'הפוך מגרש' },
   myTeamBottom:        { en: 'My team: bottom',   he: 'הקבוצה שלי: למטה' },
   myTeamTop:           { en: 'My team: top',      he: 'הקבוצה שלי: למעלה' },
+  doneBtn:             { en: 'Done',              he: 'סיום' },
+  annotateHint:        { en: 'Drag players to where they were · tap a player to tag an error · draw the attack', he: 'גרור שחקנים למקומם · הקש על שחקן לסימון שגיאה · צייר את ההתקפה' },
+  annotDefenceError:       { en: 'Defence Error',        he: 'שגיאת הגנה' },
+  annotBlockPositionError: { en: 'Block Position Error', he: 'שגיאת עמדת חסימה' },
+  annotLocationError:      { en: 'Location Error',       he: 'שגיאת מיקום' },
+  playerErrorsTagged:      { en: '{n} player errors tagged', he: '{n} שגיאות שחקן סומנו' },
 
   // ── Heatmap modal ─────────────────────────────────────────────────────────
   attackHeatmap:           { en: 'Attack Heatmap',        he: 'מפת חום התקפות' },

@@ -26,6 +26,7 @@ export function normalizeDrawing(drawing) {
     paths: mirrorPaths(drawing.paths),
     startPoint: mirrorPoint(drawing.startPoint),
     endPoint: mirrorPoint(drawing.endPoint),
+    ...(drawing.playerPositions ? { playerPositions: drawing.playerPositions.map(mirrorPoint) } : {}),
     flipped: false,
   };
 }

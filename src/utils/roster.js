@@ -9,8 +9,14 @@ export function isPlayerReferenced(match, playerId) {
 
   if ((match.rotationHistory || []).some(h => inRotation(h.rotation))) return true;
 
+  const inDrawing = d =>
+    (d.playerPositions || []).some(p => p.playerId === playerId) ||
+    (d.playerErrors || []).some(e => e.playerId === playerId);
+
   return (match.sets || []).some(set =>
     inRotation(set.rotation) ||
+    (set.attackDrawings || []).some(inDrawing) ||
+    (set.blockingDrawings || []).some(inDrawing) ||
     inRotation(set.startingRotation) ||
     (set.substitutions || []).some(s => s.outPlayerId === playerId || s.inPlayerId === playerId) ||
     (set.events || []).some(e =>

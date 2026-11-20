@@ -306,7 +306,11 @@ function reducer(state, action) {
         startPoint: action.startPoint ?? null,
         endPoint: action.endPoint,
         flipped: !!action.flipped, // raw canvas coords; normalizeDrawing() mirrors Y for display
+        eventId: pendingCourtDraw.eventId ?? null,
         imageData: action.imageData,
+        // Manual +1 annotations (optional) — never affect score or stats
+        ...(action.playerPositions?.length ? { playerPositions: action.playerPositions } : {}),
+        ...(action.playerErrors?.length ? { playerErrors: action.playerErrors } : {}),
       };
       const isBlockingMistake = pendingCourtDraw.eventType === 'block_mistake';
       const updatedSet = isBlockingMistake
@@ -359,6 +363,7 @@ function reducer(state, action) {
       let newRotationVersion = match.rotationVersion || 0;
       let newRotationHistory = [...(match.rotationHistory || [])];
       let newEvents          = currentSet.events;
+      let manualEventId      = null;
 
       if (delta > 0) {
         // Snapshot pre-event state so we can store it on the synthetic event for undo
@@ -380,8 +385,9 @@ function reducer(state, action) {
         }
 
         // Synthetic event so this score adjustment appears in the log and is undoable
+        manualEventId = uuidv4();
         newEvents = [...currentSet.events, {
-          id: uuidv4(),
+          id: manualEventId,
           type: 'manual_score',
           scoringTeam: team,
           playerId: null,
@@ -418,7 +424,7 @@ function reducer(state, action) {
         showCourtDraw,
         lastUndoneEvent: null,
         pendingCourtDraw: showCourtDraw
-          ? { setIndex, score: { home: newHomeScore, opponent: newOpponentScore }, timestamp: Date.now(), eventType: 'manual' }
+          ? { setIndex, score: { home: newHomeScore, opponent: newOpponentScore }, timestamp: Date.now(), eventType: 'manual', eventId: manualEventId }
           : state.pendingCourtDraw,
       };
     }

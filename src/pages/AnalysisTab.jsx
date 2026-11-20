@@ -17,6 +17,7 @@ import {
 } from '../utils/analysisStats';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
+import { findDrawingForEvent, playerErrorLabelKey } from '../utils/courtAnnotations';
 
 const ERROR_RED_RAMP = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444', '#f87171'];
 
@@ -994,7 +995,11 @@ function EventLogSection({ currentMatch, players, t }) {
   const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
 
   const allEvents = currentMatch.sets.flatMap((set, si) =>
-    (set.events || []).map(e => ({ ...e, setNum: si + 1 }))
+    (set.events || []).map(e => ({
+      ...e,
+      setNum: si + 1,
+      taggedErrors: findDrawingForEvent(set, e)?.playerErrors || [],
+    }))
   );
 
   if (!allEvents.length) return null;
@@ -1016,10 +1021,12 @@ function EventLogSection({ currentMatch, players, t }) {
         <div className="border-t border-slate-700 divide-y divide-slate-700/50 max-h-96 overflow-y-auto">
           {allEvents.map((ev, i) => {
             const p = ev.playerId ? playerMap[ev.playerId] : null;
-            const isHomeScore = HOME_SCORE_EVENTS.has(ev.type);
-            const isOppScore  = OPPONENT_SCORE_EVENTS.has(ev.type);
+            const isManual    = ev.type === 'manual_score';
+            const isHomeScore = HOME_SCORE_EVENTS.has(ev.type) || (isManual && ev.scoringTeam === 'home');
+            const isOppScore  = OPPONENT_SCORE_EVENTS.has(ev.type) || (isManual && ev.scoringTeam === 'opponent');
             return (
-              <div key={i} className="flex items-center gap-3 px-3 py-2 text-xs">
+              <div key={i} className="px-3 py-2 text-xs">
+              <div className="flex items-center gap-3">
                 <div className="text-slate-600 w-5 text-right font-mono">{i + 1}</div>
                 <div className="text-slate-600 text-[10px] w-8">S{ev.setNum}</div>
                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -1028,12 +1035,22 @@ function EventLogSection({ currentMatch, players, t }) {
                 <div className="flex-1 min-w-0">
                   <span className="text-slate-300">{p ? p.name : '—'}</span>
                   <span className="text-slate-500 ml-2">
-                    {EVENT_TYPE_I18N_KEY[ev.type] ? t(EVENT_TYPE_I18N_KEY[ev.type]) : ev.type}
+                    {isManual ? t('manualScore') : EVENT_TYPE_I18N_KEY[ev.type] ? t(EVENT_TYPE_I18N_KEY[ev.type]) : ev.type}
                   </span>
                 </div>
                 <div className="text-slate-400 font-mono text-[10px] tabular-nums">
                   {ev.homeScore ?? '?'}–{ev.opponentScore ?? '?'}
                 </div>
+              </div>
+              {/* Player errors tagged on the manual +1 court popup */}
+              {ev.taggedErrors.map((pe, j) => {
+                const tp = playerMap[pe.playerId];
+                return (
+                  <div key={j} className="ps-16 text-[10px] text-red-300 truncate">
+                    ✕ {tp ? `#${tp.number} ${tp.name}` : '—'} · {t(playerErrorLabelKey(pe.errorType) ?? pe.errorType)}
+                  </div>
+                );
+              })}
               </div>
             );
           })}

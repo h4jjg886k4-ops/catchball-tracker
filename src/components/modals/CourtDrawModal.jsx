@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Undo2, Trash2, Check, ArrowUpDown } from 'lucide-react';
+import { Undo2, Trash2, Check, ArrowUpDown, X } from 'lucide-react';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { COURT_ORIENTATION, isFlipped, mirrorPaths } from '../../utils/courtOrientation';
+import { COURT_ORIENTATION, isFlipped, mirrorPaths, mirrorPoint } from '../../utils/courtOrientation';
+import { PLAYER_ERROR_TYPES, defaultPlayerPositions } from '../../utils/courtAnnotations';
 
 const COURT_COLOR = '#1a3a5c';
 const LINE_COLOR = '#93c5fd';
@@ -11,6 +12,27 @@ const NET_COLOR = '#fbbf24';
 const DRAW_COLOR = '#ff6b35';
 const DRAW_WIDTH = 3;
 const ATTACK_END_COLOR = '#ef4444';
+const DRAG_THRESHOLD_PX = 6;
+
+const clamp01 = v => Math.min(1, Math.max(0, v));
+
+// Burn the player circles into the saved snapshot (they're HTML on screen, not canvas)
+function drawPlayerMarkers(ctx, w, h, markers) {
+  markers.forEach(({ x, y, number, tagged }) => {
+    ctx.fillStyle = tagged ? '#7f1d1d' : '#1d4ed8';
+    ctx.strokeStyle = tagged ? '#ef4444' : '#bfdbfe';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x * w, y * h, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(number), x * w, y * h);
+  });
+}
 
 // flipped: my team on top, opponent at the bottom — mirrors labels and zone numbers vertically
 function drawCourt(ctx, w, h, labels, flipped = false) {
@@ -133,8 +155,19 @@ export default function CourtDrawModal() {
 
   const score = pendingCourtDraw?.score;
   const isBlockingMistake = pendingCourtDraw?.eventType === 'block_mistake';
+  // Player annotations only on the manual "+1 opponent" popup
+  const isManual = pendingCourtDraw?.eventType === 'manual';
   const courtLabels = { opponent: t('courtOpponent'), home: t('courtHome') };
   const flipped = isFlipped(currentMatch?.courtOrientation);
+
+  // The modal mounts fresh each time it opens, so initial state = current rotation
+  const players = currentMatch?.homeTeam.players ?? [];
+  const drawSet = currentMatch?.sets[pendingCourtDraw?.setIndex ?? currentMatch?.currentSetIndex];
+  const [playerPos, setPlayerPos]       = useState(() => defaultPlayerPositions(drawSet?.rotation, flipped));
+  const [movedAny, setMovedAny]         = useState(false);
+  const [playerErrors, setPlayerErrors] = useState([]); // [{ playerId, errorType }]
+  const [menuFor, setMenuFor]           = useState(null);
+  const dragRef = useRef(null);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -189,6 +222,7 @@ export default function CourtDrawModal() {
 
   function onStart(e) {
     e.preventDefault();
+    setMenuFor(null);
     if (isEraser) {
       const pos = getPos(e);
       const canvas = canvasRef.current;
@@ -225,10 +259,56 @@ export default function CourtDrawModal() {
     setCurrentPath(null);
   }
 
+  // ── Player circles: drag to move, tap (no drag) to open the error menu ──
+  function onPlayerPointerDown(e) {
+    const { playerId } = e.currentTarget.dataset;
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { playerId, sx: e.clientX, sy: e.clientY, dragging: false };
+  }
+
+  function onPlayerPointerMove(e) {
+    const { playerId } = e.currentTarget.dataset;
+    const drag = dragRef.current;
+    if (!drag || drag.playerId !== playerId) return;
+    e.preventDefault();
+    if (!drag.dragging && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < DRAG_THRESHOLD_PX) return;
+    drag.dragging = true;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const pos = {
+      x: clamp01((e.clientX - rect.left) / rect.width),
+      y: clamp01((e.clientY - rect.top) / rect.height),
+    };
+    setPlayerPos(prev => ({ ...prev, [playerId]: pos }));
+    setMovedAny(true);
+    setMenuFor(null);
+  }
+
+  function onPlayerPointerUp(e) {
+    const { playerId } = e.currentTarget.dataset;
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (drag && drag.playerId === playerId && !drag.dragging) {
+      setMenuFor(cur => (cur === playerId ? null : playerId));
+    }
+  }
+
+  function onPlayerPointerCancel() {
+    dragRef.current = null;
+  }
+
+  function toggleError(playerId, errorType) {
+    setPlayerErrors(prev => prev.some(e => e.playerId === playerId && e.errorType === errorType)
+      ? prev.filter(e => !(e.playerId === playerId && e.errorType === errorType))
+      : [...prev, { playerId, errorType }]);
+  }
+
   // Mirror any lines already drawn so they stay on the same spot of the court
   function handleFlip() {
     setPaths(prev => mirrorPaths(prev));
     setCurrentPath(null);
+    setPlayerPos(prev => Object.fromEntries(Object.entries(prev).map(([id, pt]) => [id, mirrorPoint(pt)])));
     dispatch({
       type: 'SET_COURT_ORIENTATION',
       orientation: flipped ? COURT_ORIENTATION.NORMAL : COURT_ORIENTATION.FLIPPED,
@@ -237,6 +317,14 @@ export default function CourtDrawModal() {
 
   function handleSave() {
     const canvas = canvasRef.current;
+    if (isManual) {
+      drawPlayerMarkers(canvas.getContext('2d'), canvas.width, canvas.height,
+        Object.entries(playerPos).map(([id, pt]) => ({
+          ...pt,
+          number: players.find(p => p.id === id)?.number ?? '',
+          tagged: playerErrors.some(e => e.playerId === id),
+        })));
+    }
     const imageData = canvas.toDataURL('image/png');
     const lastPath = paths[paths.length - 1];
     const endPoint = lastPath?.points[lastPath.points.length - 1] || null;
@@ -244,7 +332,12 @@ export default function CourtDrawModal() {
     // Generate ID here so syncDispatch can reference the same ID to save imageData
     // to the drawings sub-collection before the reducer stores the drawing in state.
     const id = uuidv4();
-    dispatch({ type: 'SAVE_ATTACK_DRAWING', id, paths, startPoint, endPoint, flipped, imageData });
+    // Positions are saved only if the coach moved someone (all on-court players, raw canvas coords)
+    const annotations = isManual ? {
+      playerPositions: movedAny ? Object.entries(playerPos).map(([playerId, pt]) => ({ playerId, x: pt.x, y: pt.y })) : [],
+      playerErrors,
+    } : {};
+    dispatch({ type: 'SAVE_ATTACK_DRAWING', id, paths, startPoint, endPoint, flipped, imageData, ...annotations });
   }
 
   function handleSkip() {
@@ -279,7 +372,7 @@ export default function CourtDrawModal() {
       {/* Instruction + flip toggle */}
       <div className="flex items-center justify-between gap-2 px-3 py-2 flex-shrink-0">
         <span className="text-slate-400 text-xs min-w-0">
-          {isBlockingMistake ? t('drawBlockingHint') : t('drawAttackHint')}
+          {isManual ? t('annotateHint') : isBlockingMistake ? t('drawBlockingHint') : t('drawAttackHint')}
         </span>
         <button
           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold flex-shrink-0 transition-colors active:scale-95 ${
@@ -308,6 +401,83 @@ export default function CourtDrawModal() {
           onTouchMove={onMove}
           onTouchEnd={onEnd}
         />
+
+        {/* Draggable / tappable player circles (manual +1 only) */}
+        {isManual && Object.entries(playerPos).map(([playerId, pt]) => {
+          const player = players.find(p => p.id === playerId);
+          if (!player) return null;
+          const tagged = playerErrors.some(e => e.playerId === playerId);
+          const open = menuFor === playerId;
+          return (
+            <button
+              key={playerId}
+              type="button"
+              className={`absolute w-10 h-10 -ml-5 -mt-5 rounded-full border-2 flex items-center justify-center text-sm font-black text-white shadow-lg select-none transition-colors ${
+                tagged ? 'bg-red-900 border-red-500' : open ? 'bg-blue-600 border-white' : 'bg-blue-700 border-blue-200'
+              }`}
+              style={{ left: `${pt.x * 100}%`, top: `${pt.y * 100}%`, touchAction: 'none' }}
+              dir="ltr"
+              data-player-id={playerId}
+              onPointerDown={onPlayerPointerDown}
+              onPointerMove={onPlayerPointerMove}
+              onPointerUp={onPlayerPointerUp}
+              onPointerCancel={onPlayerPointerCancel}
+            >
+              {player.number}
+              {tagged && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 border border-white flex items-center justify-center">
+                  <X size={10} strokeWidth={3} />
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        {/* Inline error menu next to the tapped player */}
+        {isManual && menuFor && playerPos[menuFor] && (() => {
+          const pt = playerPos[menuFor];
+          const player = players.find(p => p.id === menuFor);
+          const horiz = pt.x < 0.35 ? { left: `${pt.x * 100}%` }
+            : pt.x > 0.65 ? { right: `${(1 - pt.x) * 100}%` }
+            : { left: `${pt.x * 100}%`, transform: 'translateX(-50%)' };
+          const vert = pt.y > 0.5
+            ? { bottom: `calc(${(1 - pt.y) * 100}% + 26px)` }
+            : { top: `calc(${pt.y * 100}% + 26px)` };
+          return (
+            <div
+              className="absolute z-10 w-48 bg-slate-800 border border-slate-600 rounded-xl shadow-2xl p-2"
+              style={{ ...horiz, ...vert }}
+              onPointerDown={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-1.5 px-1">
+                <span className="text-white text-xs font-bold truncate">
+                  <span dir="ltr">#{player?.number}</span> {player?.name}
+                </span>
+                <button type="button" className="text-slate-400 hover:text-white flex-shrink-0" onClick={() => setMenuFor(null)}>
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-1">
+                {PLAYER_ERROR_TYPES.map(({ type, labelKey }) => {
+                  const on = playerErrors.some(e => e.playerId === menuFor && e.errorType === type);
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      className={`flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                        on ? 'bg-red-900/70 border-red-600 text-red-100' : 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'
+                      }`}
+                      onClick={() => toggleError(menuFor, type)}
+                    >
+                      {t(labelKey)}
+                      {on && <Check size={13} className="flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Toolbar */}
@@ -349,7 +519,7 @@ export default function CourtDrawModal() {
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold text-sm transition-colors active:scale-95"
           onClick={handleSave}
         >
-          <Check size={16} /> {t('save')}
+          <Check size={16} /> {isManual ? t('doneBtn') : t('save')}
         </button>
       </div>
     </div>

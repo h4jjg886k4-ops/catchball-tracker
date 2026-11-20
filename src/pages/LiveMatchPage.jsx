@@ -6,6 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { VIEWS, EVENT_TYPES as T, EVENT_CONFIG, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { calcPlayerStats } from '../utils/stats';
+import { findDrawingForEvent, playerErrorLabelKey } from '../utils/courtAnnotations';
 import ScoreHeader from '../components/ui/ScoreHeader';
 import SubstitutionModal from '../components/modals/SubstitutionModal';
 import CourtDrawModal from '../components/modals/CourtDrawModal';
@@ -197,8 +198,10 @@ export default function LiveMatchPage() {
                 const isLast = idx === 0;
                 const isSub  = ev.isSubstitution === true;
                 const conf   = EVENT_CONFIG.find(c => c.type === ev.type);
-                const isHome = HOME_SCORE_EVENTS.has(ev.type);
-                const isOpp  = OPPONENT_SCORE_EVENTS.has(ev.type);
+                const isManual = ev.type === 'manual_score';
+                const isHome = HOME_SCORE_EVENTS.has(ev.type) || (isManual && ev.scoringTeam === 'home');
+                const isOpp  = OPPONENT_SCORE_EVENTS.has(ev.type) || (isManual && ev.scoringTeam === 'opponent');
+                const taggedErrors = findDrawingForEvent(currentSet, ev)?.playerErrors || [];
                 const scoreColor = isHome ? 'text-green-400' : isOpp ? 'text-red-400' : 'text-slate-600';
                 const scoreMark  = isHome ? '+1' : isOpp ? '-1' : '•';
                 const timeStr = new Date(ev.timestamp).toLocaleTimeString([], {
@@ -216,7 +219,8 @@ export default function LiveMatchPage() {
                     .join(' → ');
                 } else {
                   const evPlayer = players.find(p => p.id === ev.playerId);
-                  label = conf && EVENT_TYPE_I18N_KEY[conf.type]
+                  label = isManual ? t('manualScore')
+                    : conf && EVENT_TYPE_I18N_KEY[conf.type]
                     ? t(EVENT_TYPE_I18N_KEY[conf.type]) : conf?.label ?? ev.type;
                   subLine = evPlayer ? `#${evPlayer.number} ${evPlayer.name}` : null;
                 }
@@ -245,6 +249,15 @@ export default function LiveMatchPage() {
                       {subLine && (
                         <div className="text-[10px] text-slate-500 truncate">{subLine}</div>
                       )}
+                      {/* Player errors tagged on the manual +1 court popup */}
+                      {taggedErrors.map((pe, i) => {
+                        const p = players.find(pl => pl.id === pe.playerId);
+                        return (
+                          <div key={i} className="text-[10px] text-red-300 truncate">
+                            ✕ {p ? `#${p.number} ${p.name}` : '—'} · {t(playerErrorLabelKey(pe.errorType) ?? pe.errorType)}
+                          </div>
+                        );
+                      })}
                     </div>
                     {/* Score badge */}
                     <span className={`text-[10px] font-black flex-shrink-0 w-5 text-right ${scoreColor}`}>
