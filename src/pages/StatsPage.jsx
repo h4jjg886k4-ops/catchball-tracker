@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Download, FileSpreadsheet, FileText, BarChart2, User, Layers, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Download, FileSpreadsheet, FileText, BarChart2, User, Layers, RotateCcw, Info, UserCog } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS } from '../utils/constants';
 import { calcPlayerStats, calcTeamStats, calcSetStats } from '../utils/stats';
 import { exportToExcel, exportToPDF } from '../utils/export';
 import AnalysisTab from './AnalysisTab';
+import ReassignPlayerModal from '../components/modals/ReassignPlayerModal';
 
 function StatBadge({ value, label, color = 'default', size = 'md' }) {
   const colorClass = {
@@ -98,13 +99,14 @@ function SetCard({ set, setNum, players, t }) {
 }
 
 export default function StatsPage() {
-  const { state, navigate } = useMatch();
+  const { state, dispatch, navigate } = useMatch();
   const { t } = useLanguage();
   const { currentMatch } = state;
   const [activeTab, setActiveTab] = useState('overview');
   const [exporting, setExporting] = useState(false);
   const [selectedSetFilter, setSelectedSetFilter] = useState('all');
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
+  const [showReassign, setShowReassign] = useState(false);
 
   if (!currentMatch) {
     return (
@@ -291,7 +293,10 @@ export default function StatsPage() {
                 />
               </div>
               <div className="grid grid-cols-3 divide-x divide-x-slate-700 border-t border-slate-700">
-                <StatBadge value={teamStats.blocks} label={t('blocksLabel')} />
+                <StatBadge
+                  value={t('blocksTotalFmt', { total: teamStats.blockTouchesTotal, kills: teamStats.blocks })}
+                  label={t('blocksLabel')}
+                />
                 <StatBadge value={teamStats.allAttackSuccess} label={t('killsLabel')} color="blue" />
                 <StatBadge value={teamStats.serveErrors} label={t('srvLabel')} color="red" />
               </div>
@@ -304,24 +309,30 @@ export default function StatsPage() {
                   <Layers size={14} /> {t('rotEfficiency')}
                   <span className="text-slate-500 text-xs font-normal">({t('frontRowLabel')})</span>
                 </div>
+                <div className="px-4 py-2 border-b border-slate-700/60 flex items-start gap-1.5 text-slate-400 text-[11px] leading-snug">
+                  <Info size={12} className="flex-shrink-0 mt-0.5" />
+                  <span>{t('rotEfficiencyInfo')}</span>
+                </div>
                 <div className="divide-y divide-slate-700/50">
+                  {teamStats.rotationEfficiency.length === 0 && (
+                    <div className="px-4 py-3 text-slate-600 text-xs">—</div>
+                  )}
                   {teamStats.rotationEfficiency.map(rot => {
-                    const names = rot.playerIds?.length
-                      ? rot.playerIds.map(id => players.find(p => p.id === id)?.name).filter(Boolean).join(' / ')
-                      : null;
+                    // Exactly the 3 front-row players (P4 / P3 / P2) for this combo
+                    const names = rot.playerIds
+                      .map(id => (id && players.find(p => p.id === id)?.name) || '—')
+                      .join(' / ');
                     return (
-                      <div key={rot.position} className="flex items-center gap-3 px-4 py-2.5">
+                      <div key={rot.key} className="flex items-center gap-3 px-4 py-2.5">
                         <div className="text-slate-500 text-xs font-bold w-6 flex-shrink-0">R{rot.position}</div>
-                        <div className="flex-1 min-w-0 text-slate-300 text-xs truncate">{names || '—'}</div>
+                        <div className="flex-1 min-w-0 text-slate-300 text-xs truncate">{names}</div>
                         <div className={`font-bold text-sm tabular-nums flex-shrink-0 ${
-                          rot.efficiency === null ? 'text-slate-600' :
-                          rot.efficiency >= 60 ? 'text-green-400' :
-                          rot.efficiency >= 40 ? 'text-yellow-400' : 'text-red-400'
-                        }`}>
-                          {rot.efficiency !== null ? `${rot.efficiency}%` : '—'}
+                          rot.efficiency > 0 ? 'text-green-400' : rot.efficiency < 0 ? 'text-red-400' : 'text-slate-400'
+                        }`} dir="ltr">
+                          {rot.efficiency > 0 ? `+${rot.efficiency}` : rot.efficiency}
                         </div>
-                        <div className="text-slate-600 text-xs tabular-nums flex-shrink-0">
-                          ({rot.points}/{rot.rallies})
+                        <div className="text-slate-500 text-xs tabular-nums flex-shrink-0" dir="ltr">
+                          {rot.pct !== null ? `${rot.pct}%` : '—'} ({rot.won}/{rot.rallies})
                         </div>
                       </div>
                     );
@@ -367,6 +378,14 @@ export default function StatsPage() {
         {/* Players tab */}
         {activeTab === 'players' && (
           <div className="animate-fade-in space-y-3">
+            <div className="flex justify-end">
+              <button
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 text-xs font-semibold transition-colors"
+                onClick={() => setShowReassign(true)}
+              >
+                <UserCog size={13} /> {t('reassignPlayer')}
+              </button>
+            </div>
             {/* Set filter pills */}
             {currentMatch.sets.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
@@ -477,6 +496,8 @@ export default function StatsPage() {
           </div>
         )}
       </div>
+
+      {showReassign && <ReassignPlayerModal onClose={() => setShowReassign(false)} />}
 
       {/* Continue match button */}
       {currentMatch.status !== 'completed' && (

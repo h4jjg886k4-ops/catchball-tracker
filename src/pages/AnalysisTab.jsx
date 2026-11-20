@@ -18,12 +18,14 @@ import {
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
 import { findDrawingForEvent, playerErrorLabelKey } from '../utils/courtAnnotations';
+import { calcServeOutcomes } from '../utils/stats';
 
 const ERROR_RED_RAMP = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444', '#f87171'];
 
 const ERROR_TYPE_DEFS = [
   { type: 'serve_error',            labelKey: 'serveError',          directPts: true  },
   { type: 'attack_out',             labelKey: 'attackOut',           directPts: true  },
+  { type: 'attack_steps',           labelKey: 'attackSteps',         directPts: true  },
   { type: 'attack_blocked',         labelKey: 'attackBlocked',       directPts: true  },
   { type: 'attack_net_touch',       labelKey: 'attackNetTouch',      directPts: true  },
   { type: 'defense_error',          labelKey: 'defenseError',        directPts: true  },
@@ -119,7 +121,7 @@ function MatchScoreHeader({ currentMatch, t }) {
 }
 
 // ── Summary Cards ─────────────────────────────────────────────────────────────
-function SummaryCards({ teamStats, playerAdvancedMap, players, momentum, serveEff, t }) {
+function SummaryCards({ teamStats, playerAdvancedMap, players, momentum, serveEff, serveOutcomes, t }) {
   const mvpEntry = players
     .map(p => ({ p, s: playerAdvancedMap[p.id] }))
     .filter(({ s }) => s && s.totalPoints > 0)
@@ -129,6 +131,18 @@ function SummaryCards({ teamStats, playerAdvancedMap, players, momentum, serveEf
     pct !== null && den ? `${pct}% (${num}/${den})` : '—';
 
   const cards = [
+    {
+      label: t('sideOutPctLabel'),
+      value: fmt(serveOutcomes.sideOut.pct, serveOutcomes.sideOut.won, serveOutcomes.sideOut.total),
+      sub: t('sideOutPctHint'),
+      color: 'text-emerald-400',
+    },
+    {
+      label: t('holdPctLabel'),
+      value: fmt(serveOutcomes.hold.pct, serveOutcomes.hold.won, serveOutcomes.hold.total),
+      sub: t('holdPctHint'),
+      color: 'text-sky-400',
+    },
     {
       label: t('gainPointAfterServe'),
       value: fmt(serveEff.pct, serveEff.wins, serveEff.total),
@@ -1093,6 +1107,7 @@ export default function AnalysisTab({ currentMatch, t }) {
   const teamStats       = useMemo(() => calcAdvancedTeamStats(players, filteredEvents), [players, filteredEvents]);
   const momentum        = useMemo(() => calcMomentum(filteredEvents), [filteredEvents]);
   const serveEff        = useMemo(() => calcServeEfficiency(filteredSets), [filteredSets]);
+  const serveOutcomes   = useMemo(() => calcServeOutcomes(filteredSets), [filteredSets]);
   const momentumShifts  = useMemo(() => detectMomentumShifts(filteredSets), [filteredSets]);
 
   const clutchMap = useMemo(() => {
@@ -1199,6 +1214,7 @@ export default function AnalysisTab({ currentMatch, t }) {
         players={players}
         momentum={momentum}
         serveEff={serveEff}
+        serveOutcomes={serveOutcomes}
         t={t}
       />
 

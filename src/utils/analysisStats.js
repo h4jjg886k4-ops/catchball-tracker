@@ -1,9 +1,9 @@
 import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './constants';
 import { normalizeDrawing } from './courtOrientation';
 
-const ATTACK_ERR_TYPES = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED]);
+const ATTACK_ERR_TYPES = new Set([T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_BLOCKED]);
 const ERROR_TYPES = new Set([
-  T.SERVE_ERROR, T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH,
+  T.SERVE_ERROR, T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH,
   T.DEFENSE_ERROR, T.SET_ERROR, T.BLOCK_MISTAKE,
   T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR,
 ]);
@@ -17,6 +17,7 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const cont2nd       = ev.filter(e => e.type === T.ATTACK_CONT_2ND).length;
   const cont3rd       = ev.filter(e => e.type === T.ATTACK_CONT_3RD).length;
   const attackOut     = ev.filter(e => e.type === T.ATTACK_OUT).length;
+  const attackSteps   = ev.filter(e => e.type === T.ATTACK_STEPS).length;
 
   // Blocked attacks: split by ballNumber if available; events without ballNumber default to 3rd
   const blockedEvents   = ev.filter(e => e.type === T.ATTACK_BLOCKED);
@@ -25,13 +26,13 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const blocked3rd      = blockedEvents.filter(e => e.ballNumber === 3).length;
   const blockedUnknown  = blockedEvents.filter(e => !e.ballNumber).length; // legacy, treat as 3rd
   const attackNetTouch  = ev.filter(e => e.type === T.ATTACK_NET_TOUCH).length;
-  const totalAttackErrors = attackOut + attackBlocked + attackNetTouch;
+  const totalAttackErrors = attackOut + attackSteps + attackBlocked + attackNetTouch;
 
   // Ball-number–aware attempt counts include corresponding blocked attacks
   const attempts2nd = wins2nd + cont2nd + blocked2nd;
   const attempts3rd = wins3rd + cont3rd + blocked3rd + blockedUnknown;
   const totalAttackWins = wins2nd + wins3rd;
-  const totalAttackAttempts = attempts2nd + attempts3rd + attackOut + attackNetTouch;
+  const totalAttackAttempts = attempts2nd + attempts3rd + attackOut + attackSteps + attackNetTouch;
 
   const aces         = ev.filter(e => e.type === T.ACE).length;
   const blocks       = ev.filter(e => e.type === T.BLOCK).length;
@@ -45,13 +46,13 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const opponentErrs         = ev.filter(e => e.type === T.OPPONENT_ERROR).length;
 
   const totalPoints   = aces + totalAttackWins + blocks + opponentErrs;
-  const totalMistakes = serveErrors + attackOut + attackBlocked + attackNetTouch + defenseError + setError + blockMistake + blockError + defenceLocationError;
+  const totalMistakes = serveErrors + attackOut + attackSteps + attackBlocked + attackNetTouch + defenseError + setError + blockMistake + blockError + defenceLocationError;
 
   return {
     playerId,
     wins2nd, wins3rd, totalAttackWins,
     cont2nd, cont3rd,
-    attackOut, attackBlocked, blocked2nd, blocked3rd, totalAttackErrors,
+    attackOut, attackSteps, attackBlocked, blocked2nd, blocked3rd, totalAttackErrors,
     attempts2nd, attempts3rd, totalAttackAttempts,
     pct2nd: attempts2nd > 0 ? Math.round(wins2nd / attempts2nd * 100) : null,
     pct3rd: attempts3rd > 0 ? Math.round(wins3rd / attempts3rd * 100) : null,
@@ -182,7 +183,7 @@ export function calcEventDistribution(allEvents) {
     switch (ev.type) {
       case T.ATTACK_WIN_2ND: case T.ATTACK_WIN_3RD: add('Attack Win'); break;
       case T.ATTACK_CONT_2ND: case T.ATTACK_CONT_3RD: add('Attack Cont.'); break;
-      case T.ATTACK_OUT: case T.ATTACK_BLOCKED: add('Attack Error'); break;
+      case T.ATTACK_OUT: case T.ATTACK_STEPS: case T.ATTACK_BLOCKED: add('Attack Error'); break;
       case T.ACE: add('Ace'); break;
       case T.SERVE_ERROR: add('Serve Error'); break;
       case T.SERVE_IN: add('Serve In'); break;
@@ -226,6 +227,7 @@ export function calcContributionScore(stats) {
   const neg =
     stats.serveErrors +
     stats.attackOut +
+    (stats.attackSteps || 0) +
     stats.attackBlocked +
     (stats.attackNetTouch || 0) +
     (stats.defenseError || 0) +
@@ -269,7 +271,7 @@ export function detectMomentumShifts(sets, minRun = 3) {
 // Front row = positions P2/P3/P4 = indices 1,2,3 of rotationSnapshot (see RotationView.jsx).
 const FRONT_ROW_INDICES = [1, 2, 3];
 
-const ATTACK_ATTEMPT_TYPES = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD, T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH]);
+const ATTACK_ATTEMPT_TYPES = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD, T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH]);
 const ATTACK_WIN_TYPES     = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD]);
 // Block-attributable outcomes vs. an opponent attack: we stopped it (BLOCK) or the opponent
 // scored because of a block/defensive-position mistake (BLOCK_ERROR / DEFENCE_LOCATION_ERROR).

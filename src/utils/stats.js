@@ -2,7 +2,7 @@ import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './co
 
 const ATTACK_WIN_TYPES  = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD]);
 const ATTACK_CONT_TYPES = new Set([T.ATTACK_CONT_2ND, T.ATTACK_CONT_3RD]);
-const ATTACK_ERR_TYPES  = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH]);
+const ATTACK_ERR_TYPES  = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH, T.ATTACK_STEPS]);
 const ALL_ATTACK_TYPES  = new Set([...ATTACK_WIN_TYPES, ...ATTACK_CONT_TYPES, ...ATTACK_ERR_TYPES]);
 const SERVE_TYPES       = new Set([T.ACE, T.SERVE_IN, T.SERVE_ERROR]);
 const DEFENSE_TYPES     = new Set([T.DEFENSE_SUCCESS, T.DEFENSE_ERROR]);
@@ -29,12 +29,13 @@ export function calcPlayerStats(playerId, events) {
   const attackKills3 = ev.filter(e => e.type === T.ATTACK_WIN_3RD).length;
   const attackContTotal = attackCont.length;                      // rally continues
   const attackOut    = ev.filter(e => e.type === T.ATTACK_OUT).length;
+  const attackSteps  = ev.filter(e => e.type === T.ATTACK_STEPS).length;
   const attackBlocked= ev.filter(e => e.type === T.ATTACK_BLOCKED).length;
   const attackTotal  = attackAll.length;
 
-  // Standard efficiency: (kills − out − blocked) / total
+  // Standard efficiency: (kills − out − steps − blocked) / total
   const attackEfficiency = attackTotal > 0
-    ? Math.round((attackKills - attackOut - attackBlocked) / attackTotal * 100)
+    ? Math.round((attackKills - attackOut - attackSteps - attackBlocked) / attackTotal * 100)
     : null;
 
   const servePct = serveAll.length > 0
@@ -63,7 +64,7 @@ export function calcPlayerStats(playerId, events) {
   const points = aces + attackKills + blocks +
     ev.filter(e => e.type === T.OPPONENT_ERROR).length;
 
-  const errors = serveErrors + attackOut + attackBlocked + attackNetTouch + defenseError + setError + blockErrors + defenceLocationErrors;
+  const errors = serveErrors + attackOut + attackSteps + attackBlocked + attackNetTouch + defenseError + setError + blockErrors + defenceLocationErrors;
 
   // Card display stats (live match player grid)
   const cardPoints   = aces + attackKills + blocks;
@@ -87,6 +88,7 @@ export function calcPlayerStats(playerId, events) {
     attackKills3rd: attackKills3,
     attackCont: attackContTotal,
     attackOut,
+    attackSteps,
     attackBlocked,
     attackTotal,
     attackPct: attackEfficiency,   // alias kept for StatsPage grid
@@ -109,7 +111,7 @@ export function calcPlayerStats(playerId, events) {
     cardAttacks,
     cardMistakes,
     // Legacy aliases used by StatsPage (map to new equivalents)
-    attackErrors: attackOut + attackBlocked,
+    attackErrors: attackOut + attackSteps + attackBlocked,
     receptionPct: defensePct,      // StatsPage still shows this column
     digs: defenseSuccess,
     sets: setSuccess,
@@ -153,6 +155,7 @@ export function calcTeamStats(sets) {
     allAttackTotal,
     aces: allEvents.filter(e => e.type === T.ACE).length,
     blocks: allEvents.filter(e => e.type === T.BLOCK).length,
+    blockTouchesTotal: allEvents.filter(e => e.type === T.BLOCK || e.type === T.BLOCK_TOUCH).length,
     serves: allEvents.filter(e => SERVE_TYPES.has(e.type)).length,
     serveErrors: allEvents.filter(e => e.type === T.SERVE_ERROR).length,
     rotationEfficiency: calcRotationEfficiency(sets),
@@ -163,30 +166,65 @@ export function calcTeamStats(sets) {
   };
 }
 
+// Front row = P4, P3, P2 (rotation indices 3, 2, 1), listed left → right as on court.
+const FRONT_ROW_IDX = [3, 2, 1];
+
+// Which team won the rally an event ended, or null if the rally continues
+function rallyWinner(event) {
+  if (HOME_SCORE_EVENTS.has(event.type)) return 'home';
+  if (OPPONENT_SCORE_EVENTS.has(event.type)) return 'opponent';
+  if (event.type === 'manual_score') return event.scoringTeam ?? null;
+  return null;
+}
+
+// One row per distinct front-row trio (exact P2/P3/P4 lineup from each event's
+// rotationSnapshot) — a substitution produces a new trio, so before/after are never merged.
+// efficiency = rallies won − rallies lost while the trio was front row; pct = % won.
 export function calcRotationEfficiency(sets) {
-  const pts      = Array(6).fill(0);
-  const rallies  = Array(6).fill(0);
-  const frontRow = Array(6).fill(null).map(() => new Set());
+  const combos = new Map();
   sets.forEach(set => {
     (set.events || []).forEach(event => {
-      const i = (event.rotationIndex || 0) % 6;
-      rallies[i]++;
-      if (HOME_SCORE_EVENTS.has(event.type)) pts[i]++;
-      if (Array.isArray(event.rotationSnapshot)) {
-        // Front row: positions 2, 3, 4 = indices 1, 2, 3 of the rotation array
-        [1, 2, 3].forEach(idx => {
-          if (event.rotationSnapshot[idx]) frontRow[i].add(event.rotationSnapshot[idx]);
-        });
-      }
+      const winner = rallyWinner(event);
+      if (!winner || !Array.isArray(event.rotationSnapshot)) return;
+      const playerIds = FRONT_ROW_IDX.map(idx => event.rotationSnapshot[idx] || '');
+      const rotationIndex = (event.rotationIndex || 0) % 6;
+      const key = `${rotationIndex}|${playerIds.join('|')}`;
+      if (!combos.has(key)) combos.set(key, { key, position: rotationIndex + 1, playerIds, won: 0, lost: 0 });
+      const c = combos.get(key);
+      if (winner === 'home') c.won++; else c.lost++;
     });
   });
-  return pts.map((p, i) => ({
-    position: i + 1,
-    points: p,
-    rallies: rallies[i],
-    efficiency: rallies[i] > 0 ? Math.round(p / rallies[i] * 100) : null,
-    playerIds: [...frontRow[i]],
-  }));
+  return [...combos.values()].map(c => {
+    const rallies = c.won + c.lost;
+    return {
+      ...c,
+      rallies,
+      points: c.won,
+      efficiency: c.won - c.lost,
+      pct: rallies > 0 ? Math.round(c.won / rallies * 100) : null,
+    };
+  });
+}
+
+// Side-out % (rallies won on opponent serve) and hold % (rallies won on our serve).
+// Uses the servingTeam recorded on each event, so manual +1 points count too.
+export function calcServeOutcomes(sets) {
+  const sideOut = { won: 0, total: 0 };
+  const hold    = { won: 0, total: 0 };
+  sets.forEach(set => {
+    let serving = set.startServingTeam || 'home';
+    (set.events || []).forEach(event => {
+      const winner = rallyWinner(event);
+      if (!winner) return;
+      const server = event.servingTeam || serving;
+      const bucket = server === 'home' ? hold : sideOut;
+      bucket.total++;
+      if (winner === 'home') bucket.won++;
+      serving = winner;
+    });
+  });
+  const pct = b => (b.total > 0 ? Math.round(b.won / b.total * 100) : null);
+  return { sideOut: { ...sideOut, pct: pct(sideOut) }, hold: { ...hold, pct: pct(hold) } };
 }
 
 export function calcSetStats(set) {

@@ -21,6 +21,7 @@ export const EVENT_TYPES = {
   ATTACK_OUT:       'attack_out',       // ball goes out of bounds
   ATTACK_BLOCKED:   'attack_blocked',   // opponent block wins the rally
   ATTACK_NET_TOUCH: 'attack_net_touch', // player touches the net during attack
+  ATTACK_STEPS:     'attack_steps',     // steps / traveling during the attack
   // Defense
   DEFENSE_SUCCESS:  'defense_success',  // successful dig / defense
   DEFENSE_ERROR:    'defense_error',    // ball drops / failed defense
@@ -57,6 +58,7 @@ export const OPPONENT_SCORE_EVENTS = new Set([
   T.ATTACK_OUT,
   T.ATTACK_BLOCKED,
   T.ATTACK_NET_TOUCH,
+  T.ATTACK_STEPS,
   T.DEFENSE_ERROR,
   T.SET_ERROR,
   T.BLOCK_ERROR,
@@ -67,6 +69,7 @@ export const OPPONENT_SCORE_EVENTS = new Set([
 export const COURT_DRAW_EVENTS = new Set([
   T.ATTACK_BLOCKED,
   T.ATTACK_NET_TOUCH,
+  T.ATTACK_STEPS,
   T.SET_ERROR,
   T.BLOCK_MISTAKE,
   T.BLOCK_ERROR,
@@ -104,6 +107,7 @@ export const EVENT_CONFIG = [
   { type: T.ATTACK_OUT,       label: 'Attack Out',        emoji: '💥', score: '-1', color: 'red',   category: 'attack' },
   { type: T.ATTACK_BLOCKED,   label: 'Blocked',           emoji: '🛑', score: '-1', color: 'red',   category: 'attack' },
   { type: T.ATTACK_NET_TOUCH, label: 'Net Touch',         emoji: '🕸️', score: '-1', color: 'red',   category: 'attack' },
+  { type: T.ATTACK_STEPS,     label: 'Steps',             emoji: '👣', score: '-1', color: 'red',   category: 'attack' },
   // ── DEFENSE ────────────────────────────────────────────────────────
   { type: T.BLOCK_TOUCH,      label: 'Block Touch',      emoji: '🖐️', score: null, color: 'blue',  category: 'defense' },
   { type: T.BLOCK_MISTAKE,    label: 'Blocking Mistake', emoji: '🚫', score: null, color: 'slate', category: 'defense' },

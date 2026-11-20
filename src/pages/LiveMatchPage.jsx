@@ -365,15 +365,16 @@ export default function LiveMatchPage() {
       );
     }
 
-    // Attack error step 1: Blocked | Net Touch | Out
+    // Attack error step 1: Blocked | Net Touch | Out | Steps
     function AttackErrScreen() {
       return (
         <div className="p-3 flex flex-col gap-2">
           <SubHeader color="text-red-400" label={t('attackErrSubmenu')} />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <BigBtn emoji="🛑" label={t('blockedAttackLabel')} score="-1" color="red" onClick={() => pushFlow('attackErrBlocked')} />
             <BigBtn emoji="🕸️" label={t('attackNetTouch')}    score="-1" color="red" onClick={() => recordEvent(T.ATTACK_NET_TOUCH)} />
             <BigBtn emoji="💥" label={t('attackOut')}          score="-1" color="red" onClick={() => recordEvent(T.ATTACK_OUT)} />
+            <BigBtn emoji="👣" label={t('attackSteps')}        score="-1" color="red" onClick={() => recordEvent(T.ATTACK_STEPS)} />
           </div>
         </div>
       );

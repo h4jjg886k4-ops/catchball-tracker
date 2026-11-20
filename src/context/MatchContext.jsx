@@ -647,6 +647,45 @@ function reducer(state, action) {
       };
     }
 
+    // ── Reassign stats (Stats screen "Reassign Player") ────────────────────
+    // Moves every logged action from one player to another. Score, serve and the
+    // players array are untouched. Rotation arrays (event snapshots, rotation
+    // history, current/starting rotation) swap the ID only where the target isn't
+    // already present, so no lineup ever lists the same player twice.
+    case 'REASSIGN_PLAYER_STATS': {
+      const match = state.currentMatch;
+      const { fromId, toId } = action;
+      if (!match || !fromId || !toId || fromId === toId) return state;
+      const swapIn = rot => (Array.isArray(rot) && rot.includes(fromId) && !rot.includes(toId)
+        ? rot.map(id => (id === fromId ? toId : id))
+        : rot);
+      const swapErrors = d => (d.playerErrors?.some(e => e.playerId === fromId)
+        ? { ...d, playerErrors: d.playerErrors.map(e => (e.playerId === fromId ? { ...e, playerId: toId } : e)) }
+        : d);
+      const sets = match.sets.map(set => ({
+        ...set,
+        rotation: swapIn(set.rotation),
+        startingRotation: swapIn(set.startingRotation),
+        events: set.events.map(ev => {
+          if (ev.isSubstitution) return ev; // lineup record, not a stat
+          const reassigned = ev.playerId === fromId ? { ...ev, playerId: toId } : ev;
+          return reassigned.rotationSnapshot
+            ? { ...reassigned, rotationSnapshot: swapIn(reassigned.rotationSnapshot) }
+            : reassigned;
+        }),
+        attackDrawings: (set.attackDrawings || []).map(swapErrors),
+        blockingDrawings: (set.blockingDrawings || []).map(swapErrors),
+      }));
+      const rotationHistory = (match.rotationHistory || []).map(h => ({ ...h, rotation: swapIn(h.rotation) }));
+      const updated = { ...match, sets, rotationHistory };
+      const inHistory = state.matches.some(m => m.id === updated.id);
+      return {
+        ...state,
+        currentMatch: updated,
+        matches: inHistory ? upsertMatch(updated, state.matches) : state.matches,
+      };
+    }
+
     // ── Rotation setup modal ───────────────────────────────────────────────
     case 'DISMISS_ROTATION_SETUP':
       return { ...state, needsRotationSetup: false };
