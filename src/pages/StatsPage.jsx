@@ -7,6 +7,7 @@ import { calcPlayerStats, calcTeamStats, calcSetStats } from '../utils/stats';
 import { exportToExcel, exportToPDF } from '../utils/export';
 import AnalysisTab from './AnalysisTab';
 import ReassignPlayerModal from '../components/modals/ReassignPlayerModal';
+import PlayersTab from './PlayersTab';
 
 function StatBadge({ value, label, color = 'default', size = 'md' }) {
   const colorClass = {
@@ -401,44 +402,7 @@ export default function StatsPage() {
                 <UserCog size={13} /> {t('reassignPlayer')}
               </button>
             </div>
-            {playerStatsList.map(({ player, stats }) => (
-              <div key={player.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700">
-                  <div className="w-10 h-10 rounded-full bg-slate-700 border-2 border-slate-600 flex items-center justify-center text-lg font-black text-white">
-                    {player.number}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-white font-bold">{player.name}</div>
-                    <div className="text-slate-400 text-xs">{player.position}</div>
-                  </div>
-                  <div className="text-green-400 text-2xl font-black">{stats.points}</div>
-                  <div className="text-slate-500 text-xs">{t('ptsLabel')}</div>
-                </div>
-
-                <div className="grid grid-cols-4 divide-x divide-slate-700 border-b border-slate-700">
-                  <StatBadge
-                    value={stats.attackEfficiency !== null ? `${stats.attackEfficiency}%` : '—'}
-                    label={t('attLabel')}
-                    color={stats.attackEfficiency >= 40 ? 'green' : stats.attackEfficiency !== null && stats.attackEfficiency < 20 ? 'red' : 'default'}
-                  />
-                  <StatBadge value={stats.aces} label={t('acesLabel')} color="yellow" />
-                  <StatBadge
-                    value={stats.defensePct !== null ? `${stats.defensePct}%` : '—'}
-                    label={t('defLabel')}
-                    color="blue"
-                  />
-                  <StatBadge value={stats.blocks} label={t('blocksLabel')} color="blue" />
-                </div>
-
-                <div className="grid grid-cols-5 divide-x divide-slate-700">
-                  <StatBadge value={stats.attackKills} label={t('killsLabel')} color="green" />
-                  <StatBadge value={stats.attackOut} label={t('outLabel')} color="red" />
-                  <StatBadge value={stats.attackBlocked} label={t('blkdLabel')} color="red" />
-                  <StatBadge value={stats.serveErrors} label={t('srvLabel')} color="red" />
-                  <StatBadge value={stats.defenseSuccess} label={t('digsLabel')} />
-                </div>
-              </div>
-            ))}
+            <PlayersTab players={players} events={filteredEvents} t={t} />
           </div>
         )}
 

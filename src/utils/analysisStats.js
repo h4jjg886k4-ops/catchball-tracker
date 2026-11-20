@@ -44,6 +44,7 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const blockError           = ev.filter(e => e.type === T.BLOCK_ERROR).length;
   const defenceLocationError = ev.filter(e => e.type === T.DEFENCE_LOCATION_ERROR).length;
   const opponentErrs         = ev.filter(e => e.type === T.OPPONENT_ERROR).length;
+  const defenseSuccess       = ev.filter(e => e.type === T.DEFENSE_SUCCESS).length;
 
   const totalPoints   = aces + totalAttackWins + blocks + opponentErrs;
   const totalMistakes = serveErrors + attackOut + attackSteps + attackBlocked + attackNetTouch + defenseError + setError + blockMistake + blockError + defenceLocationError;
@@ -60,6 +61,7 @@ export function calcAdvancedPlayerStats(playerId, events) {
     totalPoints, totalMistakes,
     aces, blocks, blockTouches, serveErrors,
     defenseError, setError, blockMistake, blockError, defenceLocationError, attackNetTouch,
+    defenseSuccess,
   };
 }
 
@@ -217,7 +219,8 @@ export function calcServeEfficiency(sets) {
   return { wins, total, pct: total > 0 ? Math.round(wins / total * 100) : null };
 }
 
-export function calcContributionScore(stats) {
+// Positive / negative halves of the weighted contribution score
+export function calcContributionParts(stats) {
   const pos =
     (stats.wins2nd + stats.wins3rd) * 2 +
     stats.aces * 2 +
@@ -235,6 +238,12 @@ export function calcContributionScore(stats) {
     (stats.blockMistake || 0) +
     (stats.blockError || 0) +
     (stats.defenceLocationError || 0);
+  const round = v => Math.round(v * 10) / 10;
+  return { pos: round(pos), neg: round(neg) };
+}
+
+export function calcContributionScore(stats) {
+  const { pos, neg } = calcContributionParts(stats);
   return Math.round((pos - neg) * 10) / 10;
 }
 
