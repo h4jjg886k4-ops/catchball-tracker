@@ -67,6 +67,8 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const defenceLocationError = ev.filter(e => e.type === T.DEFENCE_LOCATION_ERROR).length;
   const opponentErrs         = ev.filter(e => e.type === T.OPPONENT_ERROR).length;
   const defenseSuccess       = ev.filter(e => e.type === T.DEFENSE_SUCCESS).length;
+  const serveIn              = ev.filter(e => e.type === T.SERVE_IN).length;
+  const totalActions         = ev.filter(e => !e.isSubstitution).length;
 
   const totalPoints   = aces + totalAttackWins + blocks + opponentErrs;
   const totalMistakes = serveErrors + attackOut + attackSteps + attackBlocked + attackNetTouch + defenseError + setError + blockMistake + blockError + defenceLocationError;
@@ -84,7 +86,7 @@ export function calcAdvancedPlayerStats(playerId, events) {
     totalPoints, totalMistakes,
     aces, blocks, blockTouches, serveErrors,
     defenseError, setError, blockMistake, blockError, defenceLocationError, attackNetTouch,
-    defenseSuccess,
+    defenseSuccess, serveIn, totalActions,
   };
 }
 

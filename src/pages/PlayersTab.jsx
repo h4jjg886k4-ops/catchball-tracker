@@ -2,36 +2,66 @@ import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
-  ResponsiveContainer, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ReferenceArea,
+  ScatterChart, Scatter, ResponsiveContainer, LabelList,
 } from 'recharts';
 import {
   calcAdvancedPlayerStats, calcContributionParts, rankByContribution, pickBestPlayer,
+  formatEff, SMALL_SAMPLE_ATTEMPTS,
 } from '../utils/analysisStats';
 import EffValue from '../components/ui/EffValue';
 
-// Radar series colors (dark categorical slots). Validated all-pairs on the card
-// surface #1e293b — overlapping polygons need every pair distinct, and no set
-// larger than 4 passes, so the radar shows at most 4 players at once.
-const RADAR_COLORS = ['#3987e5', '#d55181', '#c98500', '#008300'];
-const RADAR_MAX = RADAR_COLORS.length;
 const POS_COLOR = '#0ca30c';
 const NEG_COLOR = '#d03b3b';
+// One color per metric panel (dark slots, validated all-pairs on the card surface #1e293b)
+const METRIC_COLORS = { serve: '#199e70', attack: '#3987e5', block: '#c98500', errors: '#dc2626' };
+const SCATTER_COLOR = '#3987e5';
+const PANEL_ROW_H = 30;
+const NAME_COL_W = 120;
+// Recharts skips 0-length bars (and their labels/background); a sliver keeps empty rows visible
+const EMPTY_BAR = 0.0001;
+
+// Value label at the bar's outer end; negative bars are labelled just right of the zero line
+function barEndLabel(data, valueKey, labelKey) {
+  return function BarEndLabel({ x, y, width, height, index }) {
+    const row = data[index];
+    if (!row) return null;
+    const negative = row[valueKey] < 0;
+    const tx = negative ? Math.max(x, x + width) + 4 : x + Math.abs(width) + 4;
+    return (
+      <text x={tx} y={y + height / 2} dy="0.35em" fill="#e2e8f0" fontSize={11}>{row[labelKey]}</text>
+    );
+  };
+}
 
 const TOOLTIP_STYLE = {
   background: '#1e293b', border: '1px solid #334155', color: '#f1f5f9', fontSize: 12, borderRadius: 8,
 };
 
 const fmtScore = s => (s > 0 ? `+${s}` : String(s));
-const clamp10 = v => Math.max(0, Math.min(10, Math.round(v * 10) / 10));
+const pctText = v => `${Math.round(v * 100)}%`;
 
-function buildRows(players, events) {
+// Sets (within the current filter) in which the player logged an action or stood on court
+function setsPlayed(playerId, sets) {
+  return sets.filter(set =>
+    (set.events || []).some(e => e.playerId === playerId) ||
+    (set.startingRotation || []).includes(playerId) ||
+    (set.rotation || []).includes(playerId) ||
+    (set.substitutions || []).some(sub => sub.inPlayerId === playerId)
+  ).length;
+}
+
+function buildRows(players, events, sets) {
   const ranked = rankByContribution(players.map(p => ({ player: p, stats: calcAdvancedPlayerStats(p.id, events) })));
   return ranked.map(({ player, stats, score }) => {
     const { pos, neg } = calcContributionParts(stats);
+    const serveAttempts = stats.aces + stats.serveIn + stats.serveErrors;
+    const nSets = setsPlayed(player.id, sets);
     return {
       player, stats, score, pos, neg,
+      aceRate:     serveAttempts > 0 ? stats.aces / serveAttempts : null,
+      blocksPerSet: nSets > 0 ? (stats.blockTouches + stats.blocks) / nSets : null,
+      errorRate:   stats.totalActions > 0 ? stats.totalMistakes / stats.totalActions : null,
       serveKey: stats.aces + stats.serveErrors > 0 ? stats.aces - stats.serveErrors : null,
       blockKey: stats.blockTouches + stats.blocks > 0 ? stats.blockTouches + stats.blocks * 2 : null,
       errors: stats.totalMistakes,
@@ -39,23 +69,42 @@ function buildRows(players, events) {
   });
 }
 
-// Attack efficiency (−1…+1) on the 0–10 scale: 0 = −1.000, 5 = break-even, 10 = +1.000
-const effTo10 = eff => (eff === null ? 0 : clamp10((eff + 1) * 5));
-
-// Six axes on a 0–10 scale. Ratios are absolute; counts are relative to the
-// best player in the current set filter so the shape compares teammates.
-function radarScores(row, maxBlock, maxDefense, maxErrors) {
-  const s = row.stats;
-  const serveTotal = s.aces + s.serveErrors;
-  return {
-    serve:   serveTotal > 0 ? clamp10(s.aces / serveTotal * 10) : 0,
-    attack2: effTo10(s.attackEff2nd),
-    attack3: effTo10(s.attackEff3rd),
-    block:   maxBlock > 0 ? clamp10((s.blockTouches + s.blocks) / maxBlock * 10) : 0,
-    // Defense = block touches (the positive defensive action the live screen records)
-    defense: maxDefense > 0 ? clamp10(s.blockTouches / maxDefense * 10) : 0,
-    errors:  maxErrors > 0 ? clamp10((1 - s.totalMistakes / maxErrors) * 10) : 10,
-  };
+// One metric column of the comparison chart. Every panel uses the same rows and
+// row height so players line up across panels; each panel keeps its own scale.
+function MetricPanel({ data, valueKey, labelKey, color, domain, title, hint, showNames }) {
+  const height = data.length * PANEL_ROW_H + 8;
+  return (
+    <div className={showNames ? 'flex-[1.8] min-w-[240px]' : 'flex-1 min-w-[130px]'}>
+      <div className="mb-1 min-h-[30px]" style={{ paddingLeft: showNames ? NAME_COL_W : 0 }}>
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-200">
+          <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: color }} />{title}
+        </div>
+        {hint && <div className="text-[10px] text-slate-500 leading-tight">{hint}</div>}
+      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart layout="vertical" data={data} margin={{ top: 4, right: 64, bottom: 4, left: 0 }}>
+          <XAxis type="number" domain={domain} hide />
+          <YAxis
+            type="category" dataKey="name" interval={0}
+            hide={!showNames} width={showNames ? NAME_COL_W : 0}
+            tick={{ fill: '#cbd5e1', fontSize: 11 }} tickLine={false} axisLine={false}
+          />
+          {domain[0] < 0 && <ReferenceLine x={0} stroke="#64748b" />}
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+            formatter={(_, __, props) => [props.payload[labelKey], title]}
+          />
+          <Bar
+            dataKey={valueKey} fill={color} barSize={12} radius={4} isAnimationActive={false}
+            background={{ fill: '#273449', radius: 4 }}
+          >
+            <LabelList dataKey={labelKey} content={barEndLabel(data, valueKey, labelKey)} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 const COLUMNS = [
@@ -69,11 +118,11 @@ const COLUMNS = [
   { id: 'errors',    labelKey: 'colErrors',  sortVal: r => r.errors },
 ];
 
-export default function PlayersTab({ players, events, t }) {
+export default function PlayersTab({ players, events, sets, t }) {
   const { isRTL } = useLanguage();
   // SVG chart text sits in an LTR box; RLM marks keep Hebrew labels like "כדור 2" in reading order
   const svgLabel = text => (isRTL ? `\u200F${text}\u200F` : text);
-  const rows = useMemo(() => buildRows(players, events), [players, events]);
+  const rows = useMemo(() => buildRows(players, events, sets), [players, events, sets]);
   const bestPlayer = useMemo(() => pickBestPlayer(rows), [rows]);
 
   // ── Table sorting ─────────────────────────────────────────────────────────
@@ -96,60 +145,79 @@ export default function PlayersTab({ players, events, t }) {
       : { col: colId, dir: colId === 'player' ? 'asc' : 'desc' });
   }
 
-  // ── Chart player selection: playerId → color slot (stable while toggling) ──
-  const [slots, setSlots] = useState(() => {
-    const initial = {};
-    rows.slice(0, RADAR_MAX).forEach((r, i) => { initial[r.player.id] = i; });
-    return initial;
+  // ── Comparison panels (all players, contribution order) ───────────────────
+  const maxBlocksPerSet = Math.max(1, ...rows.map(r => r.blocksPerSet ?? 0));
+  const panelData = rows.map(r => {
+    const s = r.stats;
+    const small = s.totalAttackAttempts > 0 && s.totalAttackAttempts < SMALL_SAMPLE_ATTEMPTS;
+    return {
+      name: `#${r.player.number} ${r.player.name}`,
+      // empty categories plot as 0-length bars with a "—" label
+      serve: r.aceRate || EMPTY_BAR,  serveLabel: r.aceRate === null ? '—' : pctText(r.aceRate),
+      attack: s.attackEff || EMPTY_BAR, attackLabel: s.attackEff === null ? '—' : `${formatEff(s.attackEff)}${small ? ' ※' : ''}`,
+      block: r.blocksPerSet || EMPTY_BAR, blockLabel: r.blocksPerSet === null ? '—' : r.blocksPerSet.toFixed(1),
+      // inverted: bar length = share of clean actions, label = actual error rate
+      clean: r.errorRate === null ? EMPTY_BAR : (1 - r.errorRate) || EMPTY_BAR, errorLabel: r.errorRate === null ? '—' : pctText(r.errorRate),
+    };
   });
-  const [maxNotice, setMaxNotice] = useState(false);
 
-  function togglePlayer(playerId) {
-    if (playerId in slots) {
-      const next = { ...slots };
-      delete next[playerId];
-      setSlots(next);
-      setMaxNotice(false);
-      return;
-    }
-    // New player takes the lowest free color; everyone else keeps theirs
-    const used = new Set(Object.values(slots));
-    const free = RADAR_COLORS.findIndex((_, i) => !used.has(i));
-    if (free === -1) { setMaxNotice(true); return; }
-    setSlots({ ...slots, [playerId]: free });
-    setMaxNotice(false);
+  // ── Scatter: efficiency (x) vs contribution (y), bubble = attempts ────────
+  const scatterData = rows
+    .filter(r => r.stats.totalAttackAttempts > 0)
+    .map(r => ({
+      x: Math.round(r.stats.attackEff * 1000) / 1000,
+      y: r.score,
+      z: r.stats.totalAttackAttempts,
+      num: `#${r.player.number}`,
+      name: r.player.name,
+      small: r.stats.totalAttackAttempts < SMALL_SAMPLE_ATTEMPTS,
+    }));
+  const noAttackPlayers = rows.filter(r => !r.stats.totalAttackAttempts).map(r => `#${r.player.number} ${r.player.name}`);
+  // Symmetric y range on a 5-point grid so y = 0 sits in the middle
+  const yLimit = Math.max(5, Math.ceil(Math.max(...scatterData.map(d => Math.abs(d.y)), 0) * 1.15 / 5) * 5);
+  const yTicks = [-yLimit, -yLimit / 2, 0, yLimit / 2, yLimit];
+  const maxAttempts = Math.max(1, ...scatterData.map(d => d.z));
+  const bubbleRadius = z => 6 + 14 * Math.sqrt(z / maxAttempts);
+
+  function renderBubble({ cx, cy, payload }) {
+    const r = bubbleRadius(payload.z);
+    return (
+      <g>
+        <circle
+          cx={cx} cy={cy} r={r}
+          fill={payload.small ? 'none' : SCATTER_COLOR} fillOpacity={payload.small ? 0 : 0.55}
+          stroke={SCATTER_COLOR} strokeWidth={2}
+        />
+        <text x={cx} y={cy - r - 4} textAnchor="middle" fill="#e2e8f0" fontSize={11} fontWeight={600}>
+          {payload.num}{payload.small ? ' ※' : ''}
+        </text>
+      </g>
+    );
   }
 
-  const selectedRows = rows.filter(r => r.player.id in slots);
+  function renderScatterTooltip({ active, payload }) {
+    const d = active && payload?.[0]?.payload;
+    if (!d) return null;
+    return (
+      <div style={TOOLTIP_STYLE} className="px-3 py-2 space-y-0.5">
+        <div className="font-semibold">{d.num} {d.name}</div>
+        <div>{t('attackEffLabel')}: <span dir="ltr">{formatEff(d.x)}</span></div>
+        <div>{t('colScore')}: <span dir="ltr">{fmtScore(d.y)}</span></div>
+        <div>{t('tipAttempts')}: {d.z}{d.small ? ` ※ ${t('smallSampleTip')}` : ''}</div>
+      </div>
+    );
+  }
 
-  const radarData = useMemo(() => {
-    const maxBlock   = Math.max(0, ...rows.map(r => r.stats.blockTouches + r.stats.blocks));
-    const maxDefense = Math.max(0, ...rows.map(r => r.stats.blockTouches));
-    const maxErrors  = Math.max(0, ...rows.map(r => r.stats.totalMistakes));
-    const scores = Object.fromEntries(rows.map(r => [r.player.id, radarScores(r, maxBlock, maxDefense, maxErrors)]));
-    const axes = [
-      { key: 'serve',   labelKey: 'radarServe' },
-      { key: 'attack2', labelKey: 'radarAttack2' },
-      { key: 'attack3', labelKey: 'radarAttack3' },
-      { key: 'block',   labelKey: 'radarBlock' },
-      { key: 'defense', labelKey: 'radarDefense' },
-      { key: 'errors',  labelKey: 'radarErrors' },
-    ];
-    return axes.map(a => ({
-      axis: svgLabel(t(a.labelKey)),
-      ...Object.fromEntries(rows.map(r => [r.player.id, scores[r.player.id][a.key]])),
-    }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, t, isRTL]);
+  const quadLabel = (key, position) => ({ value: svgLabel(t(key)), position, fill: '#64748b', fontSize: 11 });
 
   // rows are already in contribution order (rankByContribution)
-  const barData = useMemo(() => selectedRows
+  const barData = useMemo(() => rows
     .map(r => ({
       name: `#${r.player.number} ${r.player.name}`,
-      pos: r.pos,
+      pos: r.pos || EMPTY_BAR,
       neg: -r.neg,
       net: fmtScore(r.score),
-    })), [selectedRows]);
+    })), [rows]);
 
   // ── Cell renderers ────────────────────────────────────────────────────────
   const dash = <span className="text-slate-600">—</span>;
@@ -213,78 +281,70 @@ export default function PlayersTab({ players, events, t }) {
         <div className="px-3 py-1.5 border-t border-slate-700/60 text-slate-500 text-[10px]">{t('playersTableKey')}</div>
       </div>
 
-      {/* Player filter pills — shared by both charts */}
-      <div>
-        <div className="flex flex-wrap gap-1.5">
-          {rows.map(r => {
-            const slot = slots[r.player.id];
-            const on = slot !== undefined;
-            return (
-              <button
-                key={r.player.id}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition-colors ${
-                  on ? 'bg-slate-700 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300'
-                }`}
-                onClick={() => togglePlayer(r.player.id)}
-                aria-pressed={on}
-              >
-                <span
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0 border"
-                  style={on ? { background: RADAR_COLORS[slot], borderColor: RADAR_COLORS[slot] } : { borderColor: '#475569' }}
-                />
-                <span dir="ltr">#{r.player.number}</span> {r.player.name}
-              </button>
-            );
-          })}
+      {/* 2. Player comparison: four aligned metric panels */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-700">
+          <div className="text-slate-200 font-semibold text-sm">{t('compareTitle')}</div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-[11px] text-slate-400">
+            {[
+              ['serve', 'metricServe'], ['attack', 'metricAttack'], ['block', 'metricBlock'], ['errors', 'metricErrors'],
+            ].map(([k, key]) => (
+              <span key={k} className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: METRIC_COLORS[k] }} />{t(key)}
+              </span>
+            ))}
+          </div>
         </div>
-        <div className={`text-[11px] mt-1.5 ${maxNotice ? 'text-amber-400' : 'text-slate-500'}`}>
-          {t('chartPlayersHint', { n: RADAR_MAX })}
+        <div className="overflow-x-auto">
+          <div className="flex gap-3 px-3 py-3 min-w-[760px]" dir="ltr">
+            <MetricPanel data={panelData} valueKey="serve"  labelKey="serveLabel"  color={METRIC_COLORS.serve}  domain={[0, 1]} title={t('metricServe')} hint={t('metricServeHint')} showNames />
+            <MetricPanel data={panelData} valueKey="attack" labelKey="attackLabel" color={METRIC_COLORS.attack} domain={[-1, 1]} title={t('metricAttack')} hint={t('metricAttackHint')} />
+            <MetricPanel data={panelData} valueKey="block"  labelKey="blockLabel"  color={METRIC_COLORS.block}  domain={[0, maxBlocksPerSet]} title={t('metricBlock')} hint={t('metricBlockHint')} />
+            <MetricPanel data={panelData} valueKey="clean"  labelKey="errorLabel"  color={METRIC_COLORS.errors} domain={[0, 1]} title={t('metricErrors')} hint={t('metricErrorsHint')} />
+          </div>
         </div>
       </div>
 
-      {/* 2. Radar */}
+      {/* 3. Scatter: attack efficiency vs contribution */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-700">
-          <div className="text-slate-200 font-semibold text-sm">{t('radarTitle')}</div>
-          <div className="text-slate-500 text-[11px]">{t('radarSubtitle')}</div>
+          <div className="text-slate-200 font-semibold text-sm">{t('scatterTitle')}</div>
+          <div className="text-slate-500 text-[11px]">{t('scatterNote')}</div>
         </div>
-        {selectedRows.length === 0 ? (
-          <div className="py-10 text-center text-slate-500 text-sm">{t('chartNoPlayers')}</div>
+        {scatterData.length === 0 ? (
+          <div className="py-10 text-center text-slate-500 text-sm">{t('scatterEmpty')}</div>
         ) : (
-          <>
-            <div className="px-2 pt-2" dir="ltr">
-              <ResponsiveContainer width="100%" height={300}>
-                <RadarChart data={radarData} outerRadius="72%">
-                  <PolarGrid stroke="#334155" />
-                  <PolarAngleAxis dataKey="axis" tick={{ fill: '#cbd5e1', fontSize: 11 }} />
-                  <PolarRadiusAxis domain={[0, 10]} tickCount={6} tick={false} axisLine={false} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} formatter={v => (typeof v === 'number' ? v.toFixed(1) : v)} />
-                  {selectedRows.map(r => (
-                    <Radar
-                      key={r.player.id}
-                      name={`#${r.player.number} ${r.player.name}`}
-                      dataKey={r.player.id}
-                      stroke={RADAR_COLORS[slots[r.player.id]]}
-                      fill={RADAR_COLORS[slots[r.player.id]]}
-                      fillOpacity={0.12}
-                      strokeWidth={2}
-                      dot={{ r: 3, strokeWidth: 0, fill: RADAR_COLORS[slots[r.player.id]] }}
-                      isAnimationActive={false}
-                    />
-                  ))}
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-            {/* Legend */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 pb-3">
-              {selectedRows.map(r => (
-                <div key={r.player.id} className="flex items-center gap-1.5 text-xs text-slate-300">
-                  <span className="w-3 h-0.5 rounded" style={{ background: RADAR_COLORS[slots[r.player.id]], height: 3 }} />
-                  <span dir="ltr" className="text-slate-500">#{r.player.number}</span> {r.player.name}
-                </div>
-              ))}
-            </div>
-          </>
+          <div className="px-2 pt-3" dir="ltr">
+            <ResponsiveContainer width="100%" height={380}>
+              <ScatterChart margin={{ top: 24, right: 24, bottom: 28, left: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis
+                  type="number" dataKey="x" domain={[-1.15, 1.15]} ticks={[-1, -0.5, 0, 0.5, 1]}
+                  tickFormatter={v => v.toFixed(1)} tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  label={{ value: svgLabel(t('attackEffLabel')), position: 'insideBottom', offset: -16, fill: '#94a3b8', fontSize: 11 }}
+                />
+                <YAxis
+                  type="number" dataKey="y" domain={[-yLimit, yLimit]} ticks={yTicks}
+                  tick={{ fill: '#94a3b8', fontSize: 11 }} width={44}
+                  label={{ value: svgLabel(t('colScore')), angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
+                />
+                <ReferenceArea x1={0} x2={1.15} y1={0} y2={yLimit} fill="transparent" stroke="none" label={quadLabel('quadEffContrib', 'insideTopRight')} />
+                <ReferenceArea x1={-1.15} x2={0} y1={0} y2={yLimit} fill="transparent" stroke="none" label={quadLabel('quadContribIneff', 'insideTopLeft')} />
+                <ReferenceArea x1={0} x2={1.15} y1={-yLimit} y2={0} fill="transparent" stroke="none" label={quadLabel('quadEffNoContrib', 'insideBottomRight')} />
+                <ReferenceArea x1={-1.15} x2={0} y1={-yLimit} y2={0} fill="transparent" stroke="none" label={quadLabel('quadNeedsWork', 'insideBottomLeft')} />
+                <ReferenceLine x={0} stroke="#64748b" />
+                <ReferenceLine y={0} stroke="#64748b" />
+                <Tooltip content={renderScatterTooltip} cursor={{ strokeDasharray: '3 3', stroke: '#475569' }} />
+                <Scatter data={scatterData} shape={renderBubble} isAnimationActive={false} />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        {noAttackPlayers.length > 0 && (
+          <div className="px-4 pb-3 text-slate-500 text-[11px]">
+            {t('scatterNoAttacks')}{' '}
+            {noAttackPlayers.map((n, i) => <span key={n}>{i > 0 && ', '}<bdi dir="ltr">{n}</bdi></span>)}
+          </div>
         )}
       </div>
 
@@ -298,7 +358,7 @@ export default function PlayersTab({ players, events, t }) {
           </div>
         </div>
         {barData.length === 0 ? (
-          <div className="py-10 text-center text-slate-500 text-sm">{t('chartNoPlayers')}</div>
+          <div className="py-10 text-center text-slate-500 text-sm">—</div>
         ) : (
           <div className="px-2 py-3" dir="ltr">
             <ResponsiveContainer width="100%" height={barData.length * 40 + 30}>
@@ -310,7 +370,7 @@ export default function PlayersTab({ players, events, t }) {
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                  formatter={(v, key) => [Math.abs(v), key === 'pos' ? t('posLabel') : t('negLabel')]}
+                  formatter={(v, key) => [Math.abs(v) < 0.01 ? 0 : Math.abs(v), key === 'pos' ? t('posLabel') : t('negLabel')]}
                 />
                 <Bar dataKey="neg" stackId="c" fill={NEG_COLOR} radius={[4, 0, 0, 4]} barSize={18} isAnimationActive={false} />
                 <Bar dataKey="pos" stackId="c" fill={POS_COLOR} radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>

@@ -403,7 +403,7 @@ export default function StatsPage() {
                 <UserCog size={13} /> {t('reassignPlayer')}
               </button>
             </div>
-            <PlayersTab players={players} events={filteredEvents} t={t} />
+            <PlayersTab players={players} events={filteredEvents} sets={filteredSets} t={t} />
           </div>
         )}
 
