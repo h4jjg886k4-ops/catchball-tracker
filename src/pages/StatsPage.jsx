@@ -104,7 +104,7 @@ export default function StatsPage() {
   const { currentMatch } = state;
   const [activeTab, setActiveTab] = useState('overview');
   const [exporting, setExporting] = useState(false);
-  const [selectedSetFilter, setSelectedSetFilter] = useState('all');
+  const [selectedSetIdx, setSelectedSetIdx] = useState(null); // global set filter, null = all sets
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [showReassign, setShowReassign] = useState(false);
 
@@ -126,13 +126,13 @@ export default function StatsPage() {
   }
 
   const players = currentMatch.homeTeam.players;
-  const allEvents = currentMatch.sets.flatMap(s => s.events || []);
-  const teamStats = calcTeamStats(currentMatch.sets);
-
-  // Events for the selected set filter (used in Players tab)
-  const filteredEvents = selectedSetFilter === 'all'
-    ? allEvents
-    : (currentMatch.sets[parseInt(selectedSetFilter)]?.events || []);
+  // Every tab reads from the globally selected set(s)
+  const visibleSets = currentMatch.sets
+    .map((set, idx) => ({ set, idx }))
+    .filter(({ idx }) => selectedSetIdx === null || idx === selectedSetIdx);
+  const filteredSets   = visibleSets.map(({ set }) => set);
+  const filteredEvents = filteredSets.flatMap(s => s.events || []);
+  const teamStats = calcTeamStats(filteredSets);
 
   const playerStatsList = players.map(p => ({
     player: p,
@@ -241,6 +241,21 @@ export default function StatsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Global set filter — applies to every tab */}
+      <div className="flex gap-2 overflow-x-auto px-4 py-2 bg-slate-800/30 border-b border-slate-700 flex-shrink-0">
+        {[null, ...currentMatch.sets.map((_, i) => i)].map(idx => (
+          <button
+            key={idx ?? 'all'}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+              selectedSetIdx === idx ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+            onClick={() => setSelectedSetIdx(idx)}
+          >
+            {idx === null ? t('allSets') : `${t('setLabel')} ${idx + 1}`}
+          </button>
+        ))}
       </div>
 
       {/* Tabs */}
@@ -386,30 +401,6 @@ export default function StatsPage() {
                 <UserCog size={13} /> {t('reassignPlayer')}
               </button>
             </div>
-            {/* Set filter pills */}
-            {currentMatch.sets.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                <button
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
-                    selectedSetFilter === 'all' ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                  onClick={() => setSelectedSetFilter('all')}
-                >
-                  {t('combined')}
-                </button>
-                {currentMatch.sets.map((_, i) => (
-                  <button
-                    key={i}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
-                      selectedSetFilter === String(i) ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                    }`}
-                    onClick={() => setSelectedSetFilter(String(i))}
-                  >
-                    {t('setLabel')} {i + 1}
-                  </button>
-                ))}
-              </div>
-            )}
             {playerStatsList.map(({ player, stats }) => (
               <div key={player.id} className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700">
@@ -454,24 +445,24 @@ export default function StatsPage() {
         {/* Analysis tab */}
         {activeTab === 'analysis' && (
           <div className="animate-fade-in">
-            <AnalysisTab currentMatch={currentMatch} t={t} />
+            <AnalysisTab currentMatch={currentMatch} selectedSetIdx={selectedSetIdx} t={t} />
           </div>
         )}
 
         {/* Sets tab */}
         {activeTab === 'sets' && (
           <div className="animate-fade-in space-y-3">
-            {currentMatch.sets.map((set, i) => (
-              <SetCard key={i} set={set} setNum={i + 1} players={players} t={t} />
+            {visibleSets.map(({ set, idx }) => (
+              <SetCard key={idx} set={set} setNum={idx + 1} players={players} t={t} />
             ))}
 
-            {currentMatch.sets.length > 0 && (
+            {visibleSets.length > 0 && (
               <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-700 text-slate-300 font-semibold text-sm">
                   {t('scoreProgression')}
                 </div>
                 <div className="p-4 space-y-3">
-                  {currentMatch.sets.map((set, i) => {
+                  {visibleSets.map(({ set, idx: i }) => {
                     const total = Math.max(set.homeScore + set.opponentScore, 1);
                     const homePct = Math.round(set.homeScore / total * 100);
                     return (

@@ -12,8 +12,9 @@ import {
   calcAdvancedPlayerStats, calcAdvancedTeamStats,
   calcMomentum, calcClutchStats, calcErrorByGameState,
   buildScoreTimeline, fetchAIInsights,
-  calcServeEfficiency, calcContributionScore, detectMomentumShifts,
+  calcServeEfficiency, detectMomentumShifts,
   calcFrontRowCombos, calcBlockingZoneStats,
+  rankByContribution, pickBestPlayer,
 } from '../utils/analysisStats';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
@@ -121,11 +122,8 @@ function MatchScoreHeader({ currentMatch, t }) {
 }
 
 // ── Summary Cards ─────────────────────────────────────────────────────────────
-function SummaryCards({ teamStats, playerAdvancedMap, players, momentum, serveEff, serveOutcomes, t }) {
-  const mvpEntry = players
-    .map(p => ({ p, s: playerAdvancedMap[p.id] }))
-    .filter(({ s }) => s && s.totalPoints > 0)
-    .sort((a, b) => b.s.totalPoints - a.s.totalPoints)[0];
+function SummaryCards({ teamStats, bestPlayer, momentum, serveEff, serveOutcomes, t }) {
+  const fmtScore = s => (s > 0 ? `+${s}` : String(s));
 
   const fmt = (pct, num, den) =>
     pct !== null && den ? `${pct}% (${num}/${den})` : '—';
@@ -171,8 +169,8 @@ function SummaryCards({ teamStats, playerAdvancedMap, players, momentum, serveEf
     },
     {
       label: t('mvp'),
-      value: mvpEntry ? mvpEntry.p.name : '—',
-      sub: mvpEntry ? `${mvpEntry.s.totalPoints} ${t('ptsLabel')}` : '',
+      value: bestPlayer ? bestPlayer.player.name : '—',
+      sub: bestPlayer ? `${t('contributionScore')} ${fmtScore(bestPlayer.score)}` : '',
       color: 'text-yellow-400',
     },
   ];
@@ -300,10 +298,8 @@ function AttackEfficiencyChart({ playerAdvancedList, t }) {
 }
 
 // ── Player Contribution Table ─────────────────────────────────────────────────
-function PlayerContributionTable({ playerAdvancedList, t }) {
-  const sorted = [...playerAdvancedList]
-    .map(({ player, stats }) => ({ player, stats, score: calcContributionScore(stats) }))
-    .sort((a, b) => b.score - a.score);
+function PlayerContributionTable({ ranked, bestPlayer, t }) {
+  const sorted = ranked;
 
   return (
     <Card>
@@ -321,11 +317,11 @@ function PlayerContributionTable({ playerAdvancedList, t }) {
             </tr>
           </thead>
           <tbody>
-            {sorted.map(({ player, stats, score }, i) => (
-              <tr key={player.id} className={`border-b border-slate-700/50 ${i === 0 ? 'bg-yellow-900/10' : ''}`}>
+            {sorted.map(({ player, stats, score }) => (
+              <tr key={player.id} className={`border-b border-slate-700/50 ${bestPlayer?.player.id === player.id ? 'bg-yellow-900/10' : ''}`}>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2">
-                    {i === 0 && <Award size={12} className="text-yellow-400 flex-shrink-0" />}
+                    {bestPlayer?.player.id === player.id && <Award size={12} className="text-yellow-400 flex-shrink-0" />}
                     <div>
                       <div className="text-white text-xs font-medium">{player.name}</div>
                       <div className="text-slate-500 text-[10px]">#{player.number}</div>
@@ -1004,12 +1000,12 @@ function DetailedPlayerStats({ playerAdvancedList, players, t }) {
 }
 
 // ── Full Event Log ────────────────────────────────────────────────────────────
-function EventLogSection({ currentMatch, players, t }) {
+function EventLogSection({ currentMatch, selectedSetIdx, players, t }) {
   const [open, setOpen] = useState(false);
   const playerMap = Object.fromEntries(players.map(p => [p.id, p]));
 
   const allEvents = currentMatch.sets.flatMap((set, si) =>
-    (set.events || []).map(e => ({
+    selectedSetIdx !== null && si !== selectedSetIdx ? [] : (set.events || []).map(e => ({
       ...e,
       setNum: si + 1,
       taggedErrors: findDrawingForEvent(set, e)?.playerErrors || [],
@@ -1075,12 +1071,10 @@ function EventLogSection({ currentMatch, players, t }) {
 }
 
 // ── Main AnalysisTab component ────────────────────────────────────────────────
-export default function AnalysisTab({ currentMatch, t }) {
+// selectedSetIdx comes from the global set filter on StatsPage (null = all sets)
+export default function AnalysisTab({ currentMatch, selectedSetIdx = null, t }) {
   const { dispatch } = useMatch();
   const players = currentMatch.homeTeam.players;
-
-  // ── Set filter ──────────────────────────────────────────────────────────────
-  const [selectedSetIdx, setSelectedSetIdx] = useState(null); // null = all sets
 
   const filteredSets = useMemo(() =>
     selectedSetIdx === null ? currentMatch.sets : [currentMatch.sets[selectedSetIdx]].filter(Boolean),
@@ -1098,11 +1092,8 @@ export default function AnalysisTab({ currentMatch, t }) {
     [players, filteredEvents]
   );
 
-  const playerAdvancedMap = useMemo(() => {
-    const m = {};
-    playerAdvancedList.forEach(({ player, stats }) => { m[player.id] = stats; });
-    return m;
-  }, [playerAdvancedList]);
+  const ranked     = useMemo(() => rankByContribution(playerAdvancedList), [playerAdvancedList]);
+  const bestPlayer = useMemo(() => pickBestPlayer(ranked), [ranked]);
 
   const teamStats       = useMemo(() => calcAdvancedTeamStats(players, filteredEvents), [players, filteredEvents]);
   const momentum        = useMemo(() => calcMomentum(filteredEvents), [filteredEvents]);
@@ -1174,35 +1165,8 @@ export default function AnalysisTab({ currentMatch, t }) {
     }
   }, [currentMatch, teamStats, playerAdvancedList, momentum, clutchMap, errorStateMap, players, setKey, dispatch]);
 
-  const multiSet = currentMatch.sets.length > 1;
-
   return (
     <div className="space-y-4">
-
-      {/* 0. Set filter pills */}
-      {multiSet && (
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          <button
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
-              selectedSetIdx === null ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
-            onClick={() => setSelectedSetIdx(null)}
-          >
-            {t('allSets')}
-          </button>
-          {currentMatch.sets.map((_, i) => (
-            <button
-              key={i}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
-                selectedSetIdx === i ? 'bg-blue-700 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
-              onClick={() => setSelectedSetIdx(i)}
-            >
-              {t('setLabel')} {i + 1}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* 1. Match Score Banner */}
       <MatchScoreHeader currentMatch={currentMatch} t={t} />
@@ -1210,8 +1174,7 @@ export default function AnalysisTab({ currentMatch, t }) {
       {/* 2. Summary Cards */}
       <SummaryCards
         teamStats={teamStats}
-        playerAdvancedMap={playerAdvancedMap}
-        players={players}
+        bestPlayer={bestPlayer}
         momentum={momentum}
         serveEff={serveEff}
         serveOutcomes={serveOutcomes}
@@ -1233,7 +1196,7 @@ export default function AnalysisTab({ currentMatch, t }) {
       <AttackEfficiencyChart playerAdvancedList={playerAdvancedList} t={t} />
 
       {/* 4. Player Contribution Table */}
-      <PlayerContributionTable playerAdvancedList={playerAdvancedList} t={t} />
+      <PlayerContributionTable ranked={ranked} bestPlayer={bestPlayer} t={t} />
 
       {/* 5. Attack Distribution */}
       <AttackDistributionChart playerAdvancedList={playerAdvancedList} t={t} />
@@ -1282,7 +1245,7 @@ export default function AnalysisTab({ currentMatch, t }) {
       <DetailedPlayerStats playerAdvancedList={playerAdvancedList} players={players} t={t} />
 
       {/* 15. Full Event Log */}
-      <EventLogSection currentMatch={currentMatch} players={players} t={t} />
+      <EventLogSection currentMatch={currentMatch} selectedSetIdx={selectedSetIdx} players={players} t={t} />
 
     </div>
   );

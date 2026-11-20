@@ -238,6 +238,19 @@ export function calcContributionScore(stats) {
   return Math.round((pos - neg) * 10) / 10;
 }
 
+// Single source of truth for "best player": the contribution table and the summary
+// card both rank with this, so they can never disagree (ties keep roster order).
+export function rankByContribution(playerAdvancedList) {
+  return playerAdvancedList
+    .map(({ player, stats }) => ({ player, stats, score: calcContributionScore(stats) }))
+    .sort((a, b) => b.score - a.score);
+}
+
+// Top of the ranking, or null when nobody has a non-zero contribution yet
+export function pickBestPlayer(ranked) {
+  return ranked.some(r => r.score !== 0) ? ranked[0] : null;
+}
+
 export function detectMomentumShifts(sets, minRun = 3) {
   const result = [];
   sets.forEach((set, setIdx) => {
