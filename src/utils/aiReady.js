@@ -4,6 +4,7 @@
  * Pattern detection, substitution suggestions, and match summaries
  * can be added here once an AI backend is connected.
  */
+import { normalizeDrawing } from './courtOrientation';
 
 export function extractMatchContext(match) {
   return {
@@ -23,7 +24,7 @@ export function extractMatchContext(match) {
 }
 
 export function extractAttackPatterns(sets) {
-  const allDrawings = sets.flatMap(s => s.attackDrawings || []);
+  const allDrawings = sets.flatMap(s => s.attackDrawings || []).map(normalizeDrawing);
   return {
     totalAttacks: allDrawings.length,
     attacksBySet: sets.map((s, i) => ({

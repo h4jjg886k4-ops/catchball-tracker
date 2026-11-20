@@ -49,6 +49,7 @@ function createEmptyMatch(homeTeam, opponentTeam) {
     rotationHistory: [],
     aiInsightsBySet: {},     // { "all": [...], "0": [...], "1": [...] }
     aiInsightsGeneratedAt: {}, // { "all": ts, "0": ts, "1": ts }
+    courtOrientation: 'normal', // court draw view: 'normal' (my team bottom) | 'flipped' (my team top)
   };
 }
 
@@ -302,7 +303,9 @@ function reducer(state, action) {
         timestamp: pendingCourtDraw.timestamp,
         score: pendingCourtDraw.score,
         paths: action.paths,
+        startPoint: action.startPoint ?? null,
         endPoint: action.endPoint,
+        flipped: !!action.flipped, // raw canvas coords; normalizeDrawing() mirrors Y for display
         imageData: action.imageData,
       };
       const isBlockingMistake = pendingCourtDraw.eventType === 'block_mistake';
@@ -312,6 +315,12 @@ function reducer(state, action) {
       const updatedSets = [...match.sets];
       updatedSets[setIndex] = updatedSet;
       return { ...state, currentMatch: { ...match, sets: updatedSets }, showCourtDraw: false, pendingCourtDraw: null };
+    }
+
+    case 'SET_COURT_ORIENTATION': {
+      const match = state.currentMatch;
+      if (!match) return state;
+      return { ...state, currentMatch: { ...match, courtOrientation: action.orientation } };
     }
 
     case 'SKIP_ATTACK_DRAWING':

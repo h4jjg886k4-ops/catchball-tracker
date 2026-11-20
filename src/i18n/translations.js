@@ -215,6 +215,9 @@ export const translations = {
   courtOpponent:       { en: 'OPPONENT', he: 'יריב' },
   courtHome:           { en: 'HOME',     he: 'בית' },
   courtNet:            { en: '— NET —',  he: '— רשת —' },
+  flipCourt:           { en: 'Flip court',        he: 'הפוך מגרש' },
+  myTeamBottom:        { en: 'My team: bottom',   he: 'הקבוצה שלי: למטה' },
+  myTeamTop:           { en: 'My team: top',      he: 'הקבוצה שלי: למעלה' },
 
   // ── Heatmap modal ─────────────────────────────────────────────────────────
   attackHeatmap:           { en: 'Attack Heatmap',        he: 'מפת חום התקפות' },

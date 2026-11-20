@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { X, Download } from 'lucide-react';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { normalizeDrawing } from '../../utils/courtOrientation';
 
 const COURT_COLOR = '#0f2640';
 const LINE_COLOR  = '#93c5fd';
@@ -100,7 +101,9 @@ function drawArrow(ctx, sx, sy, ex, ey, color, lineWidth) {
 }
 
 // Extract start+end from a drawing. startPt = first point of first path.
-function extractArrow(drawing) {
+// Drawings made on a flipped court are mirrored back so the opponent always attacks downward.
+function extractArrow(rawDrawing) {
+  const drawing = normalizeDrawing(rawDrawing);
   const firstPath = drawing.paths?.[0];
   if (!firstPath || firstPath.points.length === 0) return null;
   const startPt = firstPath.points[0];

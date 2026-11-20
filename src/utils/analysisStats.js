@@ -1,4 +1,5 @@
 import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './constants';
+import { normalizeDrawing } from './courtOrientation';
 
 const ATTACK_ERR_TYPES = new Set([T.ATTACK_OUT, T.ATTACK_BLOCKED]);
 const ERROR_TYPES = new Set([
@@ -352,7 +353,8 @@ export function calcBlockingZoneStats(sets, players) {
   for (const set of sets) {
     const drawings = set.attackDrawings || [];
     const triggerEvents = (set.events || []).filter(e => e.type === T.BLOCK_ERROR || e.type === T.DEFENCE_LOCATION_ERROR);
-    for (const drawing of drawings) {
+    for (const rawDrawing of drawings) {
+      const drawing = normalizeDrawing(rawDrawing);
       const triggerEvent = triggerEvents.find(e => e.timestamp === drawing.timestamp);
       if (!triggerEvent) continue; // drawing came from a different trigger (our own attack error)
       const startPt = drawing.paths?.[0]?.points?.[0];

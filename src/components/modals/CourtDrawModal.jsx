@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Undo2, Trash2, Check } from 'lucide-react';
+import { Undo2, Trash2, Check, ArrowUpDown } from 'lucide-react';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { COURT_ORIENTATION, isFlipped, mirrorPaths } from '../../utils/courtOrientation';
 
 const COURT_COLOR = '#1a3a5c';
 const LINE_COLOR = '#93c5fd';
@@ -11,7 +12,8 @@ const DRAW_COLOR = '#ff6b35';
 const DRAW_WIDTH = 3;
 const ATTACK_END_COLOR = '#ef4444';
 
-function drawCourt(ctx, w, h, labels) {
+// flipped: my team on top, opponent at the bottom — mirrors labels and zone numbers vertically
+function drawCourt(ctx, w, h, labels, flipped = false) {
   ctx.fillStyle = COURT_COLOR;
   ctx.fillRect(0, 0, w, h);
 
@@ -62,8 +64,10 @@ function drawCourt(ctx, w, h, labels) {
   ctx.fillStyle = 'rgba(255,255,255,0.5)';
   ctx.font = `bold ${Math.max(10, w / 25)}px sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(labels.opponent, w / 2, margin + 14);
-  ctx.fillText(labels.home, w / 2, h - margin - 6);
+  const topLabelY = margin + 14;
+  const bottomLabelY = h - margin - 6;
+  ctx.fillText(labels.opponent, w / 2, flipped ? bottomLabelY : topLabelY);
+  ctx.fillText(labels.home, w / 2, flipped ? topLabelY : bottomLabelY);
 
   const zoneLabels = [
     { z: '4', x: margin + cw / 6, y: h / 2 + attackOffset / 2 },
@@ -76,7 +80,7 @@ function drawCourt(ctx, w, h, labels) {
   ctx.font = `bold ${Math.max(11, w / 22)}px sans-serif`;
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   zoneLabels.forEach(({ z, x, y }) => {
-    ctx.fillText(z, x, y);
+    ctx.fillText(z, x, flipped ? h - y : y);
   });
 }
 
@@ -130,6 +134,7 @@ export default function CourtDrawModal() {
   const score = pendingCourtDraw?.score;
   const isBlockingMistake = pendingCourtDraw?.eventType === 'block_mistake';
   const courtLabels = { opponent: t('courtOpponent'), home: t('courtHome') };
+  const flipped = isFlipped(currentMatch?.courtOrientation);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -137,12 +142,12 @@ export default function CourtDrawModal() {
     const ctx = canvas.getContext('2d');
     const { width: w, height: h } = canvas;
     ctx.clearRect(0, 0, w, h);
-    drawCourt(ctx, w, h, courtLabels);
+    drawCourt(ctx, w, h, courtLabels, flipped);
     drawPaths(ctx, paths, w, h);
     if (currentPath && currentPath.points.length > 1) {
       drawPaths(ctx, [currentPath], w, h);
     }
-  }, [paths, currentPath, courtLabels.opponent, courtLabels.home]);
+  }, [paths, currentPath, courtLabels.opponent, courtLabels.home, flipped]);
 
   useEffect(() => {
     redraw();
@@ -220,15 +225,26 @@ export default function CourtDrawModal() {
     setCurrentPath(null);
   }
 
+  // Mirror any lines already drawn so they stay on the same spot of the court
+  function handleFlip() {
+    setPaths(prev => mirrorPaths(prev));
+    setCurrentPath(null);
+    dispatch({
+      type: 'SET_COURT_ORIENTATION',
+      orientation: flipped ? COURT_ORIENTATION.NORMAL : COURT_ORIENTATION.FLIPPED,
+    });
+  }
+
   function handleSave() {
     const canvas = canvasRef.current;
     const imageData = canvas.toDataURL('image/png');
     const lastPath = paths[paths.length - 1];
     const endPoint = lastPath?.points[lastPath.points.length - 1] || null;
+    const startPoint = paths[0]?.points[0] || null;
     // Generate ID here so syncDispatch can reference the same ID to save imageData
     // to the drawings sub-collection before the reducer stores the drawing in state.
     const id = uuidv4();
-    dispatch({ type: 'SAVE_ATTACK_DRAWING', id, paths, endPoint, imageData });
+    dispatch({ type: 'SAVE_ATTACK_DRAWING', id, paths, startPoint, endPoint, flipped, imageData });
   }
 
   function handleSkip() {
@@ -260,9 +276,24 @@ export default function CourtDrawModal() {
         </button>
       </div>
 
-      {/* Instruction */}
-      <div className="text-center text-slate-400 text-xs py-2 flex-shrink-0">
-        {isBlockingMistake ? t('drawBlockingHint') : t('drawAttackHint')}
+      {/* Instruction + flip toggle */}
+      <div className="flex items-center justify-between gap-2 px-3 py-2 flex-shrink-0">
+        <span className="text-slate-400 text-xs min-w-0">
+          {isBlockingMistake ? t('drawBlockingHint') : t('drawAttackHint')}
+        </span>
+        <button
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold flex-shrink-0 transition-colors active:scale-95 ${
+            flipped
+              ? 'bg-indigo-900/70 border-indigo-600 text-indigo-200'
+              : 'bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600'
+          }`}
+          onClick={handleFlip}
+          title={t('flipCourt')}
+          aria-label={t('flipCourt')}
+        >
+          <ArrowUpDown size={13} />
+          {flipped ? t('myTeamTop') : t('myTeamBottom')}
+        </button>
       </div>
 
       {/* Canvas */}
