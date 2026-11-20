@@ -86,6 +86,9 @@ export default function LiveMatchPage() {
   const pushFlow  = (step) => setFlowStack(s => [...s, step]);
   const popFlow   = ()     => setFlowStack(s => s.slice(0, -1));
   const clearFlow = ()     => setFlowStack([]);
+  // Ball (2nd / 3rd) of the section that opened the attack-error menu — saved on Out / Steps / Net Touch
+  const [attackErrBall, setAttackErrBall] = useState(null);
+  const openAttackErr = (ball) => { setAttackErrBall(ball); pushFlow('attackErr'); };
   const appMode = state.appMode;
 
   useEffect(() => {
@@ -137,6 +140,11 @@ export default function LiveMatchPage() {
     });
     clearFlow();
     setEventFlashCount(c => c + 1); // triggers flash on last-event bar
+  }
+
+  // Out / Steps / Net Touch carry the ball number of the section that opened the menu
+  function recordAttackError(type) {
+    recordEvent(type, attackErrBall ? { ballNumber: attackErrBall } : {});
   }
 
   async function handleEndSet() {
@@ -372,9 +380,9 @@ export default function LiveMatchPage() {
           <SubHeader color="text-red-400" label={t('attackErrSubmenu')} />
           <div className="grid grid-cols-2 gap-2">
             <BigBtn emoji="🛑" label={t('blockedAttackLabel')} score="-1" color="red" onClick={() => pushFlow('attackErrBlocked')} />
-            <BigBtn emoji="🕸️" label={t('attackNetTouch')}    score="-1" color="red" onClick={() => recordEvent(T.ATTACK_NET_TOUCH)} />
-            <BigBtn emoji="💥" label={t('attackOut')}          score="-1" color="red" onClick={() => recordEvent(T.ATTACK_OUT)} />
-            <BigBtn emoji="👣" label={t('attackSteps')}        score="-1" color="red" onClick={() => recordEvent(T.ATTACK_STEPS)} />
+            <BigBtn emoji="🕸️" label={t('attackNetTouch')}    score="-1" color="red" onClick={() => recordAttackError(T.ATTACK_NET_TOUCH)} />
+            <BigBtn emoji="💥" label={t('attackOut')}          score="-1" color="red" onClick={() => recordAttackError(T.ATTACK_OUT)} />
+            <BigBtn emoji="👣" label={t('attackSteps')}        score="-1" color="red" onClick={() => recordAttackError(T.ATTACK_STEPS)} />
           </div>
         </div>
       );
@@ -420,7 +428,7 @@ export default function LiveMatchPage() {
               <SubHeader color="text-orange-400" label={t('gmMistakeHint')} />
               <div className="grid grid-cols-3 gap-2">
                 <BigBtn emoji="❌" label={t('gmBadServe')}   score="-1" color="red"   onClick={() => recordEvent(T.SERVE_ERROR)} />
-                <BigBtn emoji="💢" label={t('attackErrBtn')} score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
+                <BigBtn emoji="💢" label={t('attackErrBtn')} score="-1" color="red"   onClick={() => openAttackErr(3)} />
                 <BigBtn emoji="🏐" label={t('gmBadPass')}    color="slate"             onClick={() => recordEvent(T.FREE_BALL)} />
               </div>
             </div>
@@ -452,7 +460,7 @@ export default function LiveMatchPage() {
             <div className="grid grid-cols-3 gap-1.5">
               <SmallBtn emoji="⚡" label={t('attackWin2nd')}  score="+1" color="green" onClick={() => recordEvent(T.ATTACK_WIN_2ND)} />
               <SmallBtn emoji="↩️" label={t('attackCont2nd')} color="blue"             onClick={() => recordEvent(T.ATTACK_CONT_2ND)} />
-              <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
+              <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => openAttackErr(2)} />
             </div>
           </div>
           <div>
@@ -460,7 +468,7 @@ export default function LiveMatchPage() {
             <div className="grid grid-cols-3 gap-1.5">
               <SmallBtn emoji="⚡" label={t('attackWin3rd')}  score="+1" color="green" onClick={() => recordEvent(T.ATTACK_WIN_3RD)} />
               <SmallBtn emoji="↩️" label={t('attackCont3rd')} color="blue"             onClick={() => recordEvent(T.ATTACK_CONT_3RD)} />
-              <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => pushFlow('attackErr')} />
+              <SmallBtn emoji="💢" label={t('attackErrBtn')}  score="-1" color="red"   onClick={() => openAttackErr(3)} />
             </div>
           </div>
           <div>

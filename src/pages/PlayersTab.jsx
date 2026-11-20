@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import {
@@ -7,8 +7,9 @@ import {
 } from 'recharts';
 import {
   calcAdvancedPlayerStats, calcContributionParts, rankByContribution, pickBestPlayer,
-  formatEff, SMALL_SAMPLE_ATTEMPTS,
+  formatEff, SMALL_SAMPLE_ATTEMPTS, listPlayerErrors,
 } from '../utils/analysisStats';
+import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import EffValue from '../components/ui/EffValue';
 
 const POS_COLOR = '#0ca30c';
@@ -58,7 +59,7 @@ function buildRows(players, events, sets) {
     const serveAttempts = stats.aces + stats.serveIn + stats.serveErrors;
     const nSets = setsPlayed(player.id, sets);
     return {
-      player, stats, score, pos, neg,
+      player, stats, score, pos, neg, nSets,
       aceRate:     serveAttempts > 0 ? stats.aces / serveAttempts : null,
       blocksPerSet: nSets > 0 ? (stats.blockTouches + stats.blocks) / nSets : null,
       errorRate:   stats.totalActions > 0 ? stats.totalMistakes / stats.totalActions : null,
@@ -118,7 +119,7 @@ const COLUMNS = [
   { id: 'errors',    labelKey: 'colErrors',  sortVal: r => r.errors },
 ];
 
-export default function PlayersTab({ players, events, sets, t }) {
+export default function PlayersTab({ players, events, sets, setNumbers, t }) {
   const { isRTL } = useLanguage();
   // SVG chart text sits in an LTR box; RLM marks keep Hebrew labels like "כדור 2" in reading order
   const svgLabel = text => (isRTL ? `\u200F${text}\u200F` : text);
@@ -172,7 +173,10 @@ export default function PlayersTab({ players, events, sets, t }) {
       name: r.player.name,
       small: r.stats.totalAttackAttempts < SMALL_SAMPLE_ATTEMPTS,
     }));
-  const noAttackPlayers = rows.filter(r => !r.stats.totalAttackAttempts).map(r => `#${r.player.number} ${r.player.name}`);
+  // Played in the selected sets but never attacked (bench-only players aren't listed)
+  const noAttackPlayers = rows
+    .filter(r => !r.stats.totalAttackAttempts && (r.nSets > 0 || r.stats.totalActions > 0))
+    .map(r => `#${r.player.number} ${r.player.name}`);
   // Symmetric y range on a 5-point grid so y = 0 sits in the middle
   const yLimit = Math.max(5, Math.ceil(Math.max(...scatterData.map(d => Math.abs(d.y)), 0) * 1.15 / 5) * 5);
   const yTicks = [-yLimit, -yLimit / 2, 0, yLimit / 2, yLimit];
@@ -222,6 +226,10 @@ export default function PlayersTab({ players, events, sets, t }) {
   // ── Cell renderers ────────────────────────────────────────────────────────
   const dash = <span className="text-slate-600">—</span>;
 
+  // ── Error drill-down (tap the Errors cell) ────────────────────────────────
+  const [openErrorsFor, setOpenErrorsFor] = useState(null);
+  const ballLabel = n => (n === 2 ? t('secondBall') : n === 3 ? t('thirdBall') : null);
+
   return (
     <div className="space-y-4">
 
@@ -248,8 +256,11 @@ export default function PlayersTab({ players, events, sets, t }) {
               {sortedRows.map(r => {
                 const s = r.stats;
                 const isBest = bestPlayer?.player.id === r.player.id;
+                const errorsOpen = openErrorsFor === r.player.id;
+                const errorList = errorsOpen ? listPlayerErrors(r.player.id, sets, setNumbers) : [];
                 return (
-                  <tr key={r.player.id} className={`border-b border-slate-700/50 last:border-0 ${isBest ? 'bg-yellow-900/10' : ''}`}>
+                  <Fragment key={r.player.id}>
+                  <tr className={`border-b border-slate-700/50 last:border-0 ${isBest ? 'bg-yellow-900/10' : ''}`}>
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1">
                         <span className="text-slate-500 tabular-nums" dir="ltr">#{r.player.number}</span>
@@ -270,9 +281,44 @@ export default function PlayersTab({ players, events, sets, t }) {
                       {s.blockTouches + s.blocks > 0 ? t('blockCellFmt', { t: s.blockTouches, k: s.blocks }) : dash}
                     </td>
                     <td className="px-2 py-1.5 text-center tabular-nums">
-                      <span className={r.errors > 0 ? 'text-red-400' : 'text-slate-500'}>{r.errors}</span>
+                      <button
+                        className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border transition-colors ${
+                          errorsOpen ? 'bg-red-950/60 border-red-800' : 'border-transparent hover:border-slate-600'
+                        } ${r.errors > 0 ? 'text-red-400' : 'text-slate-500'}`}
+                        onClick={() => setOpenErrorsFor(errorsOpen ? null : r.player.id)}
+                        aria-expanded={errorsOpen}
+                        title={t('showErrors')}
+                      >
+                        {r.errors}
+                        {errorsOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                      </button>
                     </td>
                   </tr>
+                  {errorsOpen && (
+                    <tr className="border-b border-slate-700/50 bg-slate-900/40">
+                      <td colSpan={COLUMNS.length} className="px-4 py-2">
+                        {errorList.length === 0 ? (
+                          <div className="text-slate-500 text-xs">{t('noErrors')}</div>
+                        ) : (
+                          <ul className="space-y-1">
+                            {errorList.map(e => (
+                              <li key={e.id} className="text-xs text-slate-300 flex items-center gap-1.5">
+                                <span className="text-slate-500">{t('setLabel')} {e.setNumber}</span>
+                                <span className="text-slate-600">·</span>
+                                <bdi dir="ltr" className="tabular-nums text-slate-400">{e.home ?? '?'}-{e.opp ?? '?'}</bdi>
+                                <span className="text-slate-600">—</span>
+                                <span className="text-red-300">
+                                  {EVENT_TYPE_I18N_KEY[e.type] ? t(EVENT_TYPE_I18N_KEY[e.type]) : e.type}
+                                  {ballLabel(e.ballNumber) && <span className="text-slate-500"> ({ballLabel(e.ballNumber)})</span>}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

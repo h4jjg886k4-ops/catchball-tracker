@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { useMatch } from '../context/MatchContext';
+import { useOptionalMatch } from '../context/MatchContext';
 import {
   Brain, TrendingUp, AlertTriangle, Award, ChevronDown, ChevronUp,
   RefreshCw, Loader2, Zap, Sparkles, Shield, MapPin,
@@ -203,7 +203,7 @@ function AIInsightsSection({ insights, loading, error, noKey, generatedAt, onGen
         title={t('aiInsights')}
         icon={Brain}
         action={
-          !noKey && insights && !loading && (
+          onGenerate && !noKey && insights && !loading && (
             <button
               onClick={onGenerate}
               className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs text-slate-300 transition-colors"
@@ -240,13 +240,13 @@ function AIInsightsSection({ insights, loading, error, noKey, generatedAt, onGen
         {!insights && !loading && !error && !noKey && (
           <div className="flex flex-col items-center gap-3 py-5">
             <p className="text-slate-500 text-sm">{t('noInsightsYet')}</p>
-            <button
+            {onGenerate && <button
               onClick={onGenerate}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-600 active:scale-95 text-white font-semibold text-sm transition-all"
             >
               <Sparkles size={14} />
               {t('generateInsights')}
-            </button>
+            </button>}
           </div>
         )}
         {insights && insights.map((insight, i) => (
@@ -1079,8 +1079,9 @@ function EventLogSection({ currentMatch, selectedSetIdx, players, t }) {
 
 // ── Main AnalysisTab component ────────────────────────────────────────────────
 // selectedSetIdx comes from the global set filter on StatsPage (null = all sets)
-export default function AnalysisTab({ currentMatch, selectedSetIdx = null, t }) {
-  const { dispatch } = useMatch();
+// readOnly (public share page): cached AI insights are shown, generating new ones is not
+export default function AnalysisTab({ currentMatch, selectedSetIdx = null, readOnly = false, t }) {
+  const dispatch = useOptionalMatch()?.dispatch;
   const players = currentMatch.homeTeam.players;
 
   const filteredSets = useMemo(() =>
@@ -1195,7 +1196,7 @@ export default function AnalysisTab({ currentMatch, selectedSetIdx = null, t }) 
         error={aiError}
         noKey={aiNoKey}
         generatedAt={aiGeneratedAt}
-        onGenerate={generateInsights}
+        onGenerate={readOnly ? null : generateInsights}
         t={t}
       />
 

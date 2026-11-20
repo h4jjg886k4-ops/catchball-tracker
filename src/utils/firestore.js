@@ -7,6 +7,11 @@
  *   teams/{teamId}       — saved rosters
  *   settings/prefs       — language + appMode
  *
+ * Public (read-only) share links:
+ *   sharedMatches/{token} — { userId, matchId, createdAt }; anyone may get() it
+ *   users/{uid}/matches/{matchId} is readable without auth only while
+ *   shareEnabled === true (see firestore.rules)
+ *
  * attackDrawings and blockingDrawings are stored WITHOUT imageData in the match
  * document (to stay well under Firestore's 1 MB limit).  imageData is saved
  * separately in the drawings collection and merged back on load.
@@ -119,11 +124,45 @@ export async function loadMatchesFS(uid) {
     .sort((a, b) => b.date - a.date);
 }
 
-export async function deleteMatchFS(uid, matchId) {
+export async function deleteMatchFS(uid, matchId, shareToken = null) {
   await Promise.all([
     deleteDoc(doc(db, 'users', uid, 'matches', matchId)),
     deleteDrawingsForMatchFS(uid, matchId),
+    // A deleted match must not leave a dangling public share entry
+    shareToken ? deleteDoc(doc(db, 'sharedMatches', shareToken)) : null,
   ]);
+}
+
+// ── Read-only share links ─────────────────────────────────────────────────────
+// Turns sharing on. A new token also gets its sharedMatches lookup document;
+// re-enabling an existing token just flips shareEnabled back on.
+export async function enableShareFS(uid, matchId, token, isNewToken) {
+  if (isNewToken) {
+    await setDoc(doc(db, 'sharedMatches', token), { userId: uid, matchId, createdAt: Date.now() });
+  }
+  await setDoc(doc(db, 'users', uid, 'matches', matchId), { shareToken: token, shareEnabled: true }, { merge: true });
+}
+
+export async function disableShareFS(uid, matchId) {
+  await setDoc(doc(db, 'users', uid, 'matches', matchId), { shareEnabled: false }, { merge: true });
+}
+
+// Public lookup for /share/:token — returns the match, or null if the link is
+// unknown or sharing is off (the rules deny the read in that case).
+export async function loadSharedMatchFS(token) {
+  if (!token) return null;
+  try {
+    const share = await getDoc(doc(db, 'sharedMatches', token));
+    if (!share.exists()) return null;
+    const { userId, matchId } = share.data();
+    const snap = await getDoc(doc(db, 'users', userId, 'matches', matchId));
+    if (!snap.exists()) return null;
+    const match = snap.data();
+    return match.shareEnabled === true && match.shareToken === token ? match : null;
+  } catch (err) {
+    if (err?.code === 'permission-denied') return null;
+    throw err;
+  }
 }
 
 // ── Saved teams ───────────────────────────────────────────────────────────────

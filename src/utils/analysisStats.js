@@ -2,7 +2,8 @@ import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './co
 import { normalizeDrawing } from './courtOrientation';
 
 const ATTACK_ERR_TYPES = new Set([T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_BLOCKED]);
-const ERROR_TYPES = new Set([
+// Every event type counted as a player mistake (matches totalMistakes below)
+export const ERROR_TYPES = new Set([
   T.SERVE_ERROR, T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH,
   T.DEFENSE_ERROR, T.SET_ERROR, T.BLOCK_MISTAKE,
   T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR,
@@ -439,6 +440,28 @@ export function calcBlockingZoneStats(sets, players) {
 }
 
 const fmtEffForAI = eff => formatEff(eff) ?? 'N/A';
+
+// A player's mistakes in the given sets, oldest first, with the rally score
+// before the error. `setNumbers[i]` is the 1-based number of `sets[i]`.
+export function listPlayerErrors(playerId, sets, setNumbers) {
+  const list = [];
+  sets.forEach((set, i) => {
+    (set.events || []).forEach(ev => {
+      if (ev.playerId !== playerId || !ERROR_TYPES.has(ev.type)) return;
+      const lostPoint = OPPONENT_SCORE_EVENTS.has(ev.type);
+      list.push({
+        id: ev.id,
+        setNumber: setNumbers?.[i] ?? i + 1,
+        timestamp: ev.timestamp ?? 0,
+        type: ev.type,
+        ballNumber: ev.ballNumber ?? null,
+        home: ev.homeScore ?? null,
+        opp: ev.opponentScore != null ? ev.opponentScore - (lostPoint ? 1 : 0) : null,
+      });
+    });
+  });
+  return list.sort((a, b) => a.setNumber - b.setNumber || a.timestamp - b.timestamp);
+}
 
 export async function fetchAIInsights(analysisData) {
   const { homeTeam, opponentTeam, team, playersSummary, momentum, clutchStats, errorStats } = analysisData;

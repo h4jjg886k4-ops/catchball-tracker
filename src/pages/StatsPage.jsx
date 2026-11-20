@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Download, FileSpreadsheet, FileText, BarChart2, User, Layers, RotateCcw, Info, UserCog } from 'lucide-react';
-import { useMatch } from '../context/MatchContext';
+import { ArrowLeft, Download, FileSpreadsheet, FileText, BarChart2, User, Layers, RotateCcw, Info, UserCog, Share2, Eye } from 'lucide-react';
+import { useOptionalMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS } from '../utils/constants';
 import { calcPlayerStats, calcTeamStats, calcSetStats } from '../utils/stats';
@@ -9,6 +9,7 @@ import EffValue from '../components/ui/EffValue';
 import { exportToExcel, exportToPDF } from '../utils/export';
 import AnalysisTab from './AnalysisTab';
 import ReassignPlayerModal from '../components/modals/ReassignPlayerModal';
+import SharePanel from '../components/modals/SharePanel';
 import PlayersTab from './PlayersTab';
 
 function StatBadge({ value, label, color = 'default', size = 'md' }) {
@@ -101,15 +102,21 @@ function SetCard({ set, setNum, players, t }) {
   );
 }
 
-export default function StatsPage() {
-  const { state, dispatch, navigate } = useMatch();
+// sharedMatch: render a public, read-only view of that match (the /share/:token page,
+// outside MatchProvider). Without it, the page shows the coach's current match.
+export default function StatsPage({ sharedMatch = null }) {
+  const matchCtx = useOptionalMatch();
+  const readOnly = !!sharedMatch;
+  const currentMatch = sharedMatch ?? matchCtx?.state.currentMatch ?? null;
+  const dispatch = matchCtx?.dispatch;
+  const navigate = matchCtx?.navigate ?? (() => {});
   const { t } = useLanguage();
-  const { currentMatch } = state;
   const [activeTab, setActiveTab] = useState('overview');
   const [exporting, setExporting] = useState(false);
   const [selectedSetIdx, setSelectedSetIdx] = useState(null); // global set filter, null = all sets
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [showReassign, setShowReassign] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   if (!currentMatch) {
     return (
@@ -168,12 +175,14 @@ export default function StatsPage() {
       <div className="bg-slate-800 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center justify-between px-4 py-3 relative">
           <div className="flex items-center gap-3">
-            <button
-              className="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors"
-              onClick={() => navigate(currentMatch.status === 'completed' ? VIEWS.HOME : VIEWS.LIVE)}
-            >
-              <ArrowLeft size={18} />
-            </button>
+            {!readOnly && (
+              <button
+                className="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors"
+                onClick={() => navigate(currentMatch.status === 'completed' ? VIEWS.HOME : VIEWS.LIVE)}
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
             <div>
               <div className="text-white font-bold text-sm">
                 {currentMatch.homeTeam.name} {t('vs')} {currentMatch.opponentTeam.name}
@@ -181,11 +190,26 @@ export default function StatsPage() {
               <div className="text-slate-400 text-xs">{new Date(currentMatch.date).toLocaleDateString()}</div>
             </div>
           </div>
+          {readOnly ? (
+            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-700 text-slate-300 text-xs font-semibold">
+              <Eye size={13} /> {t('viewOnly')}
+            </span>
+          ) : (
           <div className="flex gap-2 flex-wrap">
+            {currentMatch.status === 'completed' && (
+              <button
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  currentMatch.shareEnabled ? 'bg-blue-700 hover:bg-blue-600 text-white' : 'bg-slate-700 hover:bg-blue-800 text-white'
+                }`}
+                onClick={() => { setShowShare(v => !v); setShowReopenConfirm(false); }}
+              >
+                <Share2 size={14} /> {t('shareBtn')}
+              </button>
+            )}
             {currentMatch.status === 'completed' && !showReopenConfirm && (
               <button
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-800/60 hover:bg-amber-700/60 text-sm text-amber-300 transition-colors"
-                onClick={() => setShowReopenConfirm(true)}
+                onClick={() => { setShowReopenConfirm(true); setShowShare(false); }}
               >
                 <RotateCcw size={14} /> {t('reopenMatch')}
               </button>
@@ -205,6 +229,8 @@ export default function StatsPage() {
               <FileText size={14} /> PDF
             </button>
           </div>
+          )}
+          {showShare && !readOnly && <SharePanel match={currentMatch} onClose={() => setShowShare(false)} />}
           {/* Reopen confirmation inline */}
           {showReopenConfirm && (
             <div className="absolute top-full left-0 right-0 z-20 bg-slate-800 border border-amber-700/60 shadow-2xl p-4 mx-3 mt-1 rounded-xl">
@@ -395,22 +421,24 @@ export default function StatsPage() {
         {/* Players tab */}
         {activeTab === 'players' && (
           <div className="animate-fade-in space-y-3">
-            <div className="flex justify-end">
-              <button
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 text-xs font-semibold transition-colors"
-                onClick={() => setShowReassign(true)}
-              >
-                <UserCog size={13} /> {t('reassignPlayer')}
-              </button>
-            </div>
-            <PlayersTab players={players} events={filteredEvents} sets={filteredSets} t={t} />
+            {!readOnly && (
+              <div className="flex justify-end">
+                <button
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-200 text-xs font-semibold transition-colors"
+                  onClick={() => setShowReassign(true)}
+                >
+                  <UserCog size={13} /> {t('reassignPlayer')}
+                </button>
+              </div>
+            )}
+            <PlayersTab players={players} events={filteredEvents} sets={filteredSets} setNumbers={visibleSets.map(({ idx }) => idx + 1)} t={t} />
           </div>
         )}
 
         {/* Analysis tab */}
         {activeTab === 'analysis' && (
           <div className="animate-fade-in">
-            <AnalysisTab currentMatch={currentMatch} selectedSetIdx={selectedSetIdx} t={t} />
+            <AnalysisTab currentMatch={currentMatch} selectedSetIdx={selectedSetIdx} readOnly={readOnly} t={t} />
           </div>
         )}
 
@@ -453,10 +481,10 @@ export default function StatsPage() {
         )}
       </div>
 
-      {showReassign && <ReassignPlayerModal onClose={() => setShowReassign(false)} />}
+      {showReassign && !readOnly && <ReassignPlayerModal onClose={() => setShowReassign(false)} />}
 
       {/* Continue match button */}
-      {currentMatch.status !== 'completed' && (
+      {currentMatch.status !== 'completed' && !readOnly && (
         <div className="p-4 border-t border-slate-700 flex-shrink-0">
           <button
             className="w-full py-3.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-bold text-lg transition-colors"

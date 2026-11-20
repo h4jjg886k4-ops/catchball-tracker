@@ -10,6 +10,10 @@ import SetupPage from './pages/SetupPage';
 import LiveMatchPage from './pages/LiveMatchPage';
 import StatsPage from './pages/StatsPage';
 import HistoryPage from './pages/HistoryPage';
+import SharedMatchPage from './pages/SharedMatchPage';
+
+// Public read-only share links (/share/:token) bypass login entirely
+const shareToken = window.location.pathname.match(/^\/share\/([^/]+)\/?$/)?.[1] ?? null;
 
 function LangToggle() {
   const { lang, setLang, t } = useLanguage();
@@ -92,7 +96,14 @@ export default function App() {
     <AuthProvider>
       <LanguageProvider>
         <div className="dark">
-          <AuthGate />
+          {shareToken ? (
+            <>
+              <LangToggle />
+              <SharedMatchPage token={decodeURIComponent(shareToken)} />
+            </>
+          ) : (
+            <AuthGate />
+          )}
         </div>
       </LanguageProvider>
     </AuthProvider>

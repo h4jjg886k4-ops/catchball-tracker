@@ -686,6 +686,19 @@ function reducer(state, action) {
       };
     }
 
+    // ── Read-only share link ───────────────────────────────────────────────
+    // Keeps shareToken/shareEnabled in state so later full-document saves of
+    // the match don't wipe them. The Firestore writes happen in SharePanel.
+    case 'SET_MATCH_SHARE': {
+      const { matchId, shareToken, shareEnabled } = action;
+      const apply = m => (m?.id === matchId ? { ...m, shareToken, shareEnabled } : m);
+      return {
+        ...state,
+        currentMatch: apply(state.currentMatch),
+        matches: state.matches.map(apply),
+      };
+    }
+
     // ── Rotation setup modal ───────────────────────────────────────────────
     case 'DISMISS_ROTATION_SETUP':
       return { ...state, needsRotationSetup: false };
@@ -830,7 +843,9 @@ export function MatchProvider({ children }) {
   const syncDispatch = useCallback((action) => {
     if (user) {
       if (action.type === 'DELETE_MATCH') {
-        deleteMatchFS(user.uid, action.matchId).catch(console.error);
+        const shareToken = state.matches.find(m => m.id === action.matchId)?.shareToken
+          ?? (state.currentMatch?.id === action.matchId ? state.currentMatch.shareToken : null);
+        deleteMatchFS(user.uid, action.matchId, shareToken).catch(console.error);
         if (state.currentMatch?.id === action.matchId) {
           clearCurrentMatchFS(user.uid).catch(console.error);
         }
@@ -868,7 +883,7 @@ export function MatchProvider({ children }) {
       }
     }
     dispatch(action);
-  }, [user, state.currentMatch]);
+  }, [user, state.currentMatch, state.matches]);
 
   const forceSave = useCallback(async () => {
     const match = state.currentMatch;
@@ -891,6 +906,11 @@ export function MatchProvider({ children }) {
       {children}
     </MatchContext.Provider>
   );
+}
+
+// For views that also render outside MatchProvider (the public /share page)
+export function useOptionalMatch() {
+  return useContext(MatchContext);
 }
 
 export function useMatch() {
