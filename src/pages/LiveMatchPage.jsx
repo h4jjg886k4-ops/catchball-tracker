@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw, Shuffle, List } from 'lucide-react';
+import { ArrowLeft, BarChart2, Layers, StopCircle, RotateCw, RotateCcw, Shuffle, List, Users } from 'lucide-react';
 import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS, EVENT_TYPES as T, EVENT_CONFIG, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
@@ -12,6 +12,7 @@ import CourtDrawModal from '../components/modals/CourtDrawModal';
 import HeatmapModal from '../components/modals/HeatmapModal';
 import RotationSetupModal from '../components/modals/RotationSetupModal';
 import ServeSetupModal from '../components/modals/ServeSetupModal';
+import RosterEditModal from '../components/modals/RosterEditModal';
 
 // Physical court layout — always LTR
 const COURT_LAYOUT = [
@@ -73,6 +74,7 @@ export default function LiveMatchPage() {
   const [showRotationSetup, setShowRotationSetup] = useState(false);
   const [showEndSetConfirm, setShowEndSetConfirm] = useState(false);
   const [showEventLog, setShowEventLog] = useState(false);
+  const [showRosterEdit, setShowRosterEdit] = useState(false);
   const [undoFlash, setUndoFlash] = useState(false);
   // Flash on the last-event bar — increments per logged event, resets after 1s
   const [eventFlashCount, setEventFlashCount] = useState(0);
@@ -318,6 +320,9 @@ export default function LiveMatchPage() {
               <div className={`text-[9px] font-semibold truncate w-full px-1 text-center leading-tight ${isSelected ? 'text-blue-300' : isServer ? 'text-green-400' : 'text-slate-300'}`}>
                 {player.name.split(' ')[0]}
               </div>
+              {player.inactive && (
+                <div className="text-[7px] font-bold uppercase leading-none text-amber-400">{t('inactiveLabel')}</div>
+              )}
               {stats && (
                 <div className="flex items-center gap-0.5 mt-0.5">
                   <span className="text-green-400 text-[8px] font-bold">{stats.cardPoints}</span>
@@ -509,6 +514,12 @@ export default function LiveMatchPage() {
             >
               <Shuffle size={9} /> {t('switchPlayer')}
             </button>
+            <button
+              className="flex items-center gap-0.5 text-[10px] bg-slate-700 hover:bg-slate-600 active:scale-95 px-1.5 py-1 rounded-lg font-medium border border-slate-600 text-slate-200 transition-colors"
+              onClick={() => setShowRosterEdit(true)}
+            >
+              <Users size={9} /> {t('editRoster')}
+            </button>
           </div>
         </div>
 
@@ -696,6 +707,7 @@ export default function LiveMatchPage() {
 
       {/* Full-screen modals */}
       {showSubstitution && <SubstitutionModal onClose={() => dispatch({ type: 'HIDE_SUBSTITUTION' })} />}
+      {showRosterEdit && <RosterEditModal onClose={() => setShowRosterEdit(false)} />}
       {showCourtDraw && <CourtDrawModal />}
       {showHeatmap && <HeatmapModal />}
       {needsServeSetup && <ServeSetupModal />}

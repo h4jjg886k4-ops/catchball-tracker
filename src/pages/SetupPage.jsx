@@ -160,7 +160,8 @@ function SaveTeamButton({ teamName, players, type, isHome, t }) {
     const teamEntry = {
       id: existing?.id || uuidv4(),
       name: teamName.trim(),
-      players: validPlayers.map(p => ({ ...p })),
+      // Re-saving a loaded team keeps its original player IDs (teamPlayerId is match-only)
+      players: validPlayers.map(({ teamPlayerId, ...p }) => ({ ...p, id: teamPlayerId || p.id })),
       type,
       savedAt: Date.now(),
     };
@@ -230,7 +231,8 @@ export default function SetupPage() {
 
   function loadHomeTeam(team) {
     setHomeTeamName(team.name);
-    setPlayers(team.players.map(p => ({ ...p, id: uuidv4() })));
+    // Keep a link to the saved-team player so live roster edits can update the right entry
+    setPlayers(team.players.map(p => ({ ...p, id: uuidv4(), ...(p.id ? { teamPlayerId: p.id } : {}) })));
     setError('');
   }
 

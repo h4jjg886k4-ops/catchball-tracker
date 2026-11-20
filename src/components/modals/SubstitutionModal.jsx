@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, ArrowLeftRight, UserPlus } from 'lucide-react';
+import { X, ArrowLeftRight, UserPlus, AlertTriangle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useMatch } from '../../context/MatchContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { POSITIONS } from '../../utils/constants';
+import { findDuplicateNumber } from '../../utils/roster';
 
 export default function SubstitutionModal({ onClose }) {
   const { state, dispatch } = useMatch();
@@ -33,7 +34,10 @@ export default function SubstitutionModal({ onClose }) {
   // If no rotation is set yet, fall back to showing all players in both columns
   const onCourtPlayers = hasRotation ? players.filter(p => currentOnCourt.has(p.id)) : players;
   const benchPlayers   = hasRotation ? players.filter(p => !currentOnCourt.has(p.id)) : players;
-  const inList = benchPlayers.filter(p => p.id !== outPlayer?.id);
+  // Inactive players stay in the roster for their stats but can't be subbed in
+  const inList = benchPlayers.filter(p => p.id !== outPlayer?.id && !p.inactive);
+
+  const newNumDupes = findDuplicateNumber(players, newNum);
 
   function handleAddNewPlayer() {
     if (!newNum.trim() || !newName.trim()) return;
@@ -179,6 +183,12 @@ export default function SubstitutionModal({ onClose }) {
                 {t('add')}
               </button>
             </div>
+            {newNumDupes.length > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-300">
+                <AlertTriangle size={12} className="flex-shrink-0" />
+                {t('duplicateNumberWarn', { num: newNum.trim(), names: newNumDupes.map(p => p.name).join(', ') })}
+              </div>
+            )}
           </div>
         )}
 

@@ -111,7 +111,7 @@ export default function RotationSetupModal({ onClose }) {
                 >
                   {t('clear')}
                 </button>
-                {players.map(p => {
+                {players.filter(p => !p.inactive || rotation.includes(p.id)).map(p => {
                   const isAssigned = rotation.includes(p.id);
                   return (
                     <button

@@ -243,6 +243,27 @@ export const translations = {
   noBenchPlayers:      { en: 'No bench players',     he: 'אין שחקנים על הספסל' },
   noCourtPlayers:      { en: 'No players on court',  he: 'אין שחקנים במגרש' },
 
+  // ── Live roster editing ───────────────────────────────────────────────────
+  editRoster:              { en: 'Edit Roster',          he: 'עריכת סגל' },
+  editPlayer:              { en: 'Edit Player',          he: 'עריכת שחקן' },
+  rosterActive:            { en: 'Active Players',       he: 'שחקנים פעילים' },
+  rosterInactive:          { en: 'Inactive Players',     he: 'שחקנים לא פעילים' },
+  inactiveLabel:           { en: 'Inactive',             he: 'לא פעיל' },
+  onCourtLabel:            { en: 'On court',             he: 'במגרש' },
+  markInactive:            { en: 'Mark Inactive',        he: 'סמן כלא פעיל' },
+  reactivate:              { en: 'Reactivate',           he: 'הפעל מחדש' },
+  removePlayer:            { en: 'Remove',               he: 'הסר' },
+  confirmRemovePlayer:     { en: 'Remove {name} from this match?', he: 'להסיר את {name} מהמשחק?' },
+  removeBlockedHasHistory: { en: 'Has recorded actions in this match — can only be marked inactive.', he: 'לשחקן יש פעולות מתועדות במשחק — ניתן רק לסמן כלא פעיל.' },
+  cannotDeactivateOnCourt: { en: 'On court — substitute out before marking inactive.', he: 'השחקן במגרש — יש להחליף אותו לפני סימון כלא פעיל.' },
+  duplicateNumberWarn:     { en: 'Number #{num} is already used by {names}.', he: 'המספר #{num} כבר בשימוש אצל {names}.' },
+  errNameNumberRequired:   { en: 'Name and number are required.', he: 'שם ומספר הם שדות חובה.' },
+  newPlayersStartOnBench:  { en: 'New players start on the bench. Stats and score are not affected by roster edits.', he: 'שחקנים חדשים מתחילים על הספסל. עריכת הסגל לא משנה סטטיסטיקה או תוצאה.' },
+  alsoSaveToTeam:          { en: 'Also save to team roster "{team}"', he: 'שמור גם בסגל הקבוצה "{team}"' },
+  confirmAddToTeam:        { en: '{name} was not found in the saved team "{team}". Add as a new team player?', he: '{name} לא נמצא בקבוצה השמורה "{team}". להוסיף כשחקן חדש בקבוצה?' },
+  addToTeamBtn:            { en: 'Add to Team',          he: 'הוסף לקבוצה' },
+  skipTeamBtn:             { en: "Don't Add",            he: 'אל תוסיף' },
+
   // ── Stats page ────────────────────────────────────────────────────────────
   overview:            { en: 'Overview',            he: 'סקירה' },
   teamPerformance:     { en: 'Team Performance',    he: 'ביצועי קבוצה' },

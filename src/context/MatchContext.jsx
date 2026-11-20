@@ -9,6 +9,7 @@ import {
   saveSettingsFS, loadSettingsFS,
   saveDrawingFS,
 } from '../utils/firestore';
+import { isPlayerReferenced, isPlayerOnCourt } from '../utils/roster';
 
 const MatchContext = createContext(null);
 
@@ -584,6 +585,51 @@ function reducer(state, action) {
         homeTeam: { ...match.homeTeam, players: [...match.homeTeam.players, action.player] },
       };
       return { ...state, currentMatch: updatedMatch };
+    }
+
+    // ── Live roster editing (home team only) ───────────────────────────────
+    // These only touch homeTeam.players — never score, rotation, events or history.
+    case 'UPDATE_MATCH_PLAYER': {
+      const match = state.currentMatch;
+      if (!match) return state;
+      const allowed = ['name', 'number', 'position', 'teamPlayerId'];
+      const changes = Object.fromEntries(
+        Object.entries(action.changes || {}).filter(([k]) => allowed.includes(k))
+      );
+      const players = match.homeTeam.players.map(p =>
+        p.id === action.playerId ? { ...p, ...changes } : p
+      );
+      return { ...state, currentMatch: { ...match, homeTeam: { ...match.homeTeam, players } } };
+    }
+
+    case 'SET_MATCH_PLAYER_ACTIVE': {
+      const match = state.currentMatch;
+      if (!match) return state;
+      // Can't deactivate someone who is on court — sub them out first
+      if (!action.active && isPlayerOnCourt(match, action.playerId)) return state;
+      const players = match.homeTeam.players.map(p => {
+        if (p.id !== action.playerId) return p;
+        if (action.active) {
+          const reactivated = { ...p };
+          delete reactivated.inactive;
+          return reactivated;
+        }
+        return { ...p, inactive: true };
+      });
+      return { ...state, currentMatch: { ...match, homeTeam: { ...match.homeTeam, players } } };
+    }
+
+    case 'REMOVE_MATCH_PLAYER': {
+      const match = state.currentMatch;
+      if (!match) return state;
+      // Players with any recorded history can only be deactivated
+      if (isPlayerReferenced(match, action.playerId)) return state;
+      const players = match.homeTeam.players.filter(p => p.id !== action.playerId);
+      return {
+        ...state,
+        currentMatch: { ...match, homeTeam: { ...match.homeTeam, players } },
+        selectedPlayerId: state.selectedPlayerId === action.playerId ? null : state.selectedPlayerId,
+      };
     }
 
     // ── Rotation setup modal ───────────────────────────────────────────────
