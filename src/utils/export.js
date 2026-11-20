@@ -27,13 +27,13 @@ export async function exportToExcel(match) {
   const allEvents = match.sets.flatMap(s => s.events || []);
   const players = match.homeTeam.players;
   const statsRows = [
-    ['Player', '#', 'Position', 'Points', 'Kills(2nd)', 'Kills(3rd)', 'Att%', 'Aces', 'Serve%', 'Def%', 'Blocks', 'Digs', 'Set%', 'Out', 'Blocked', 'Errors'],
+    ['Player', '#', 'Position', 'Points', 'Kills(2nd)', 'Kills(3rd)', 'Att Eff', 'Aces', 'Serve%', 'Def%', 'Blocks', 'Digs', 'Set%', 'Out', 'Blocked', 'Errors'],
     ...players.map(p => {
       const s = calcPlayerStats(p.id, allEvents);
       return [
         p.name, p.number, p.position,
         s.points, s.attackKills2nd, s.attackKills3rd,
-        s.attackEfficiency !== null ? `${s.attackEfficiency}%` : '-',
+        s.attackEfficiency !== null ? s.attackEfficiency.toFixed(3) : '-',
         s.aces,
         s.servePct !== null ? `${s.servePct}%` : '-',
         s.defensePct !== null ? `${s.defensePct}%` : '-',
@@ -126,7 +126,7 @@ export async function exportToPDF(match) {
       p.position || '-',
       s.points,
       `${s.attackKills2nd}/${s.attackKills3rd}`,
-      s.attackEfficiency !== null ? `${s.attackEfficiency}%` : '-',
+      s.attackEfficiency !== null ? s.attackEfficiency.toFixed(3) : '-',
       s.aces,
       s.blocks,
       s.defensePct !== null ? `${s.defensePct}%` : '-',
@@ -136,7 +136,7 @@ export async function exportToPDF(match) {
 
   doc.autoTable({
     startY: y,
-    head: [['Player', 'Pos', 'Pts', 'K2/K3', 'Att%', 'Aces', 'Blk', 'Def%', 'Err']],
+    head: [['Player', 'Pos', 'Pts', 'K2/K3', 'Att Eff', 'Aces', 'Blk', 'Def%', 'Err']],
     body: statsRows,
     theme: 'striped',
     headStyles: { fillColor: [30, 58, 95] },

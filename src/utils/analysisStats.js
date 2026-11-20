@@ -8,6 +8,23 @@ const ERROR_TYPES = new Set([
   T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR,
 ]);
 const POINT_TYPES = new Set([T.ACE, T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD, T.BLOCK]);
+// Attack errors other than being blocked (they hand the opponent the point)
+const ATTACK_FAULT_TYPES = new Set([T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_NET_TOUCH]);
+
+// Below this many attempts an efficiency is flagged as a small sample (※)
+export const SMALL_SAMPLE_ATTEMPTS = 10;
+
+// "0.312" — volleyball notation, three decimals
+export function formatEff(eff) {
+  return eff === null || eff === undefined ? null : eff.toFixed(3);
+}
+
+// Standard volleyball attack efficiency: (kills − errors − blocked) ÷ total attempts,
+// where attempts = kills + errors + blocked + unsuccessful (rally-continues) attacks.
+export function attackEfficiency({ kills, errors, blocked, cont }) {
+  const attempts = kills + errors + blocked + cont;
+  return { attempts, eff: attempts > 0 ? (kills - errors - blocked) / attempts : null };
+}
 
 export function calcAdvancedPlayerStats(playerId, events) {
   const ev = events.filter(e => e.playerId === playerId);
@@ -27,12 +44,17 @@ export function calcAdvancedPlayerStats(playerId, events) {
   const blockedUnknown  = blockedEvents.filter(e => !e.ballNumber).length; // legacy, treat as 3rd
   const attackNetTouch  = ev.filter(e => e.type === T.ATTACK_NET_TOUCH).length;
   const totalAttackErrors = attackOut + attackSteps + attackBlocked + attackNetTouch;
+  // Out / steps / net touch only count toward a ball number when it was recorded
+  const faults2nd = ev.filter(e => ATTACK_FAULT_TYPES.has(e.type) && e.ballNumber === 2).length;
+  const faults3rd = ev.filter(e => ATTACK_FAULT_TYPES.has(e.type) && e.ballNumber === 3).length;
 
-  // Ball-number–aware attempt counts include corresponding blocked attacks
-  const attempts2nd = wins2nd + cont2nd + blocked2nd;
-  const attempts3rd = wins3rd + cont3rd + blocked3rd + blockedUnknown;
   const totalAttackWins = wins2nd + wins3rd;
-  const totalAttackAttempts = attempts2nd + attempts3rd + attackOut + attackSteps + attackNetTouch;
+  const eff    = attackEfficiency({ kills: totalAttackWins, errors: attackOut + attackSteps + attackNetTouch, blocked: attackBlocked, cont: cont2nd + cont3rd });
+  const eff2nd = attackEfficiency({ kills: wins2nd, errors: faults2nd, blocked: blocked2nd, cont: cont2nd });
+  const eff3rd = attackEfficiency({ kills: wins3rd, errors: faults3rd, blocked: blocked3rd + blockedUnknown, cont: cont3rd });
+  const attempts2nd = eff2nd.attempts;
+  const attempts3rd = eff3rd.attempts;
+  const totalAttackAttempts = eff.attempts;
 
   const aces         = ev.filter(e => e.type === T.ACE).length;
   const blocks       = ev.filter(e => e.type === T.BLOCK).length;
@@ -55,9 +77,10 @@ export function calcAdvancedPlayerStats(playerId, events) {
     cont2nd, cont3rd,
     attackOut, attackSteps, attackBlocked, blocked2nd, blocked3rd, totalAttackErrors,
     attempts2nd, attempts3rd, totalAttackAttempts,
-    pct2nd: attempts2nd > 0 ? Math.round(wins2nd / attempts2nd * 100) : null,
-    pct3rd: attempts3rd > 0 ? Math.round(wins3rd / attempts3rd * 100) : null,
-    overallAttackPct: totalAttackAttempts > 0 ? Math.round(totalAttackWins / totalAttackAttempts * 100) : null,
+    attackEff: eff.eff,
+    attackEff2nd: eff2nd.eff,
+    attackEff3rd: eff3rd.eff,
+    faults2nd, faults3rd,
     totalPoints, totalMistakes,
     aces, blocks, blockTouches, serveErrors,
     defenseError, setError, blockMistake, blockError, defenceLocationError, attackNetTouch,
@@ -69,21 +92,19 @@ export function calcAdvancedTeamStats(players, allEvents) {
   const stats = players.map(p => calcAdvancedPlayerStats(p.id, allEvents));
   const sum = fn => stats.reduce((s, p) => s + fn(p), 0);
 
-  const total2ndAttempts    = sum(p => p.attempts2nd);
-  const total2ndWins        = sum(p => p.wins2nd);
-  const total3rdAttempts    = sum(p => p.attempts3rd);
-  const total3rdWins        = sum(p => p.wins3rd);
-  const totalAttackAttempts = sum(p => p.totalAttackAttempts);
-  const totalAttackWins     = sum(p => p.totalAttackWins);
+  const team    = attackEfficiency({ kills: sum(p => p.totalAttackWins), errors: sum(p => p.attackOut + p.attackSteps + p.attackNetTouch), blocked: sum(p => p.attackBlocked), cont: sum(p => p.cont2nd + p.cont3rd) });
+  const team2nd = attackEfficiency({ kills: sum(p => p.wins2nd), errors: sum(p => p.faults2nd), blocked: sum(p => p.blocked2nd), cont: sum(p => p.cont2nd) });
+  const team3rd = attackEfficiency({ kills: sum(p => p.wins3rd), errors: sum(p => p.faults3rd), blocked: sum(p => p.attackBlocked - p.blocked2nd), cont: sum(p => p.cont3rd) });
 
   return {
     totalPoints:       sum(p => p.totalPoints),
-    totalAttackAttempts,
-    totalAttackWins,
-    teamAttackPct: totalAttackAttempts > 0 ? Math.round(totalAttackWins / totalAttackAttempts * 100) : null,
-    team2ndPct:    total2ndAttempts > 0 ? Math.round(total2ndWins / total2ndAttempts * 100) : null,
-    team3rdPct:    total3rdAttempts > 0 ? Math.round(total3rdWins / total3rdAttempts * 100) : null,
-    total2ndAttempts, total2ndWins, total3rdAttempts, total3rdWins,
+    totalAttackAttempts: team.attempts,
+    totalAttackWins:   sum(p => p.totalAttackWins),
+    teamAttackEff: team.eff,
+    team2ndEff:    team2nd.eff,
+    team3rdEff:    team3rd.eff,
+    total2ndAttempts: team2nd.attempts, total2ndWins: sum(p => p.wins2nd),
+    total3rdAttempts: team3rd.attempts, total3rdWins: sum(p => p.wins3rd),
     totalErrors:      sum(p => p.totalMistakes),
     totalBlockTouches: sum(p => p.blockTouches),
     totalAces:        sum(p => p.aces),
@@ -293,8 +314,8 @@ export function detectMomentumShifts(sets, minRun = 3) {
 // Front row = positions P2/P3/P4 = indices 1,2,3 of rotationSnapshot (see RotationView.jsx).
 const FRONT_ROW_INDICES = [1, 2, 3];
 
-const ATTACK_ATTEMPT_TYPES = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD, T.ATTACK_OUT, T.ATTACK_STEPS, T.ATTACK_BLOCKED, T.ATTACK_NET_TOUCH]);
 const ATTACK_WIN_TYPES     = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD]);
+const ATTACK_CONT_TYPES    = new Set([T.ATTACK_CONT_2ND, T.ATTACK_CONT_3RD]);
 // Block-attributable outcomes vs. an opponent attack: we stopped it (BLOCK) or the opponent
 // scored because of a block/defensive-position mistake (BLOCK_ERROR / DEFENCE_LOCATION_ERROR).
 const BLOCK_OUTCOME_TYPES   = new Set([T.BLOCK, T.BLOCK_ERROR, T.DEFENCE_LOCATION_ERROR]);
@@ -326,13 +347,13 @@ export function calcFrontRowCombos(players, events) {
     if (!ids) continue;
     const key = comboKey(ids);
     if (!combos[key]) {
-      combos[key] = { ids, attackAttempts: 0, attackWins: 0, blockAttempts: 0, blockScoredAgainst: 0, rallies: 0 };
+      combos[key] = { ids, kills: 0, faults: 0, blocked: 0, cont: 0, blockAttempts: 0, blockScoredAgainst: 0, rallies: 0 };
     }
     const c = combos[key];
-    if (ATTACK_ATTEMPT_TYPES.has(ev.type)) {
-      c.attackAttempts++;
-      if (ATTACK_WIN_TYPES.has(ev.type)) c.attackWins++;
-    }
+    if (ATTACK_WIN_TYPES.has(ev.type)) c.kills++;
+    else if (ATTACK_FAULT_TYPES.has(ev.type)) c.faults++;
+    else if (ev.type === T.ATTACK_BLOCKED) c.blocked++;
+    else if (ATTACK_CONT_TYPES.has(ev.type)) c.cont++;
     if (BLOCK_OUTCOME_TYPES.has(ev.type)) {
       c.blockAttempts++;
       if (BLOCK_SCORED_AGAINST_TYPES.has(ev.type)) c.blockScoredAgainst++;
@@ -340,17 +361,20 @@ export function calcFrontRowCombos(players, events) {
     if (RALLY_END_TYPES.has(ev.type)) c.rallies++;
   }
 
-  return Object.values(combos).map(c => ({
+  return Object.values(combos).map(c => {
+    const { eff, attempts } = attackEfficiency({ kills: c.kills, errors: c.faults, blocked: c.blocked, cont: c.cont });
+    return {
     names: comboNames(c.ids, playerMap),
-    attackAttempts: c.attackAttempts,
-    attackWins: c.attackWins,
-    attackPct: c.attackAttempts > 0 ? Math.round(c.attackWins / c.attackAttempts * 100) : null,
+    attackAttempts: attempts,
+    attackWins: c.kills,
+    attackEff: eff,
     blockAttempts: c.blockAttempts,
     blockScoredAgainst: c.blockScoredAgainst,
     blockStopped: c.blockAttempts - c.blockScoredAgainst,
     blockStopPct: c.blockAttempts > 0 ? Math.round((c.blockAttempts - c.blockScoredAgainst) / c.blockAttempts * 100) : null,
     rallies: c.rallies,
-  }));
+    };
+  });
 }
 
 // ── Blocking zone weakness analysis ───────────────────────────────────────────
@@ -412,6 +436,8 @@ export function calcBlockingZoneStats(sets, players) {
   return { zones, totalScored };
 }
 
+const fmtEffForAI = eff => formatEff(eff) ?? 'N/A';
+
 export async function fetchAIInsights(analysisData) {
   const { homeTeam, opponentTeam, team, playersSummary, momentum, clutchStats, errorStats } = analysisData;
 
@@ -420,10 +446,10 @@ export async function fetchAIInsights(analysisData) {
 
 Match: ${homeTeam} vs ${opponentTeam}
 
-TEAM STATS: Points=${team.totalPoints}, Attack%=${team.teamAttackPct ?? 'N/A'}%, 2nd-Ball%=${team.team2ndPct ?? 'N/A'}%(${team.total2ndWins}/${team.total2ndAttempts}), 3rd-Ball%=${team.team3rdPct ?? 'N/A'}%(${team.total3rdWins}/${team.total3rdAttempts}), Errors=${team.totalErrors}, Aces=${team.totalAces}, Blocks=${team.totalBlocks}
+TEAM STATS: Points=${team.totalPoints}, AttackEff=${fmtEffForAI(team.teamAttackEff)}(${team.totalAttackAttempts} att), 2nd-BallEff=${fmtEffForAI(team.team2ndEff)}(${team.total2ndAttempts} att), 3rd-BallEff=${fmtEffForAI(team.team3rdEff)}(${team.total3rdAttempts} att), Errors=${team.totalErrors}, Aces=${team.totalAces}, Blocks=${team.totalBlocks}
 
 PLAYERS:
-${playersSummary.map(p => `${p.name}(#${p.number}): ${p.totalPoints}pts, Overall%=${p.overallAttackPct ?? 'N/A'}%, 2nd%=${p.pct2nd ?? 'N/A'}%(${p.wins2nd}/${p.attempts2nd}), 3rd%=${p.pct3rd ?? 'N/A'}%(${p.wins3rd}/${p.attempts3rd}), Errors=${p.totalMistakes}, Aces=${p.aces}, Blocks=${p.blocks}`).join('\n')}
+${playersSummary.map(p => `${p.name}(#${p.number}): ${p.totalPoints}pts, AttackEff=${fmtEffForAI(p.attackEff)}(${p.totalAttackAttempts} att), 2ndEff=${fmtEffForAI(p.attackEff2nd)}(${p.attempts2nd} att), 3rdEff=${fmtEffForAI(p.attackEff3rd)}(${p.attempts3rd} att), Errors=${p.totalMistakes}, Aces=${p.aces}, Blocks=${p.blocks}`).join('\n')}
 
 MOMENTUM: Best home run=${momentum?.maxHomeRun?.count ?? 0}pts from ${scoreStr(momentum?.maxHomeRun?.startScore)} to ${scoreStr(momentum?.maxHomeRun?.endScore)}, Best opp run=${momentum?.maxOppRun?.count ?? 0}pts, Largest lead=+${momentum?.maxLead ?? 0} at ${scoreStr(momentum?.maxLeadScore)}
 

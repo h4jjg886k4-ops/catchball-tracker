@@ -14,12 +14,13 @@ import {
   buildScoreTimeline, fetchAIInsights,
   calcServeEfficiency, detectMomentumShifts,
   calcFrontRowCombos, calcBlockingZoneStats,
-  rankByContribution, pickBestPlayer,
+  rankByContribution, pickBestPlayer, formatEff, SMALL_SAMPLE_ATTEMPTS,
 } from '../utils/analysisStats';
 import { EVENT_TYPE_I18N_KEY } from '../i18n/translations';
 import { HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from '../utils/constants';
 import { findDrawingForEvent, playerErrorLabelKey } from '../utils/courtAnnotations';
 import { calcServeOutcomes } from '../utils/stats';
+import EffValue from '../components/ui/EffValue';
 
 const ERROR_RED_RAMP = ['#7f1d1d', '#991b1b', '#b91c1c', '#dc2626', '#ef4444', '#f87171'];
 
@@ -148,17 +149,17 @@ function SummaryCards({ teamStats, bestPlayer, momentum, serveEff, serveOutcomes
     },
     {
       label: t('teamAttackPctLabel'),
-      value: fmt(teamStats.teamAttackPct, teamStats.totalAttackWins, teamStats.totalAttackAttempts),
+      value: <EffValue eff={teamStats.teamAttackEff} attempts={teamStats.totalAttackAttempts} />,
       color: 'text-cyan-400',
     },
     {
       label: t('team2ndBallPct'),
-      value: fmt(teamStats.team2ndPct, teamStats.total2ndWins, teamStats.total2ndAttempts),
+      value: <EffValue eff={teamStats.team2ndEff} attempts={teamStats.total2ndAttempts} />,
       color: 'text-green-400',
     },
     {
       label: t('team3rdBallPct'),
-      value: fmt(teamStats.team3rdPct, teamStats.total3rdWins, teamStats.total3rdAttempts),
+      value: <EffValue eff={teamStats.team3rdEff} attempts={teamStats.total3rdAttempts} />,
       color: 'text-purple-400',
     },
     {
@@ -268,10 +269,12 @@ function AIInsightsSection({ insights, loading, error, noKey, generatedAt, onGen
 function AttackEfficiencyChart({ playerAdvancedList, t }) {
   const data = playerAdvancedList
     .filter(({ stats }) => stats.totalAttackAttempts > 0)
-    .sort((a, b) => (b.stats.overallAttackPct ?? -999) - (a.stats.overallAttackPct ?? -999))
+    .sort((a, b) => b.stats.attackEff - a.stats.attackEff)
     .map(({ player, stats }) => ({
-      name: player.name,
-      pct: stats.overallAttackPct ?? 0,
+      // ※ marks a small sample (under 10 attempts)
+      name: stats.totalAttackAttempts < SMALL_SAMPLE_ATTEMPTS ? `${player.name} ※` : player.name,
+      eff: Math.round(stats.attackEff * 1000) / 1000,
+      attempts: stats.totalAttackAttempts,
     }));
 
   if (!data.length) return null;
@@ -284,11 +287,15 @@ function AttackEfficiencyChart({ playerAdvancedList, t }) {
         <ResponsiveContainer width="100%" height={h}>
           <BarChart layout="vertical" data={data} margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-            <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => `${v}%`} />
-            <YAxis type="category" dataKey="name" tick={{ fill: '#e2e8f0', fontSize: 12 }} width={72} />
-            <Tooltip formatter={v => [`${v}%`, t('overallAttPct')]} contentStyle={TOOLTIP_STYLE} />
-            <Bar dataKey="pct" fill="#3b82f6" radius={[0, 4, 4, 0]}>
-              <LabelList dataKey="pct" position="right" formatter={v => `${v}%`} style={{ fill: '#94a3b8', fontSize: 11 }} />
+            <XAxis type="number" domain={[dataMin => Math.min(0, Math.floor(dataMin * 10) / 10), dataMax => Math.max(0.5, Math.ceil(dataMax * 10) / 10)]} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => v.toFixed(1)} />
+            <YAxis type="category" dataKey="name" tick={{ fill: '#e2e8f0', fontSize: 12 }} width={90} />
+            <ReferenceLine x={0} stroke="#64748b" />
+            <Tooltip
+              formatter={(v, _, props) => [`${formatEff(v)} (${t('attemptsFmt', { n: props.payload.attempts })})`, t('overallAttPct')]}
+              contentStyle={TOOLTIP_STYLE}
+            />
+            <Bar dataKey="eff" fill="#3b82f6" radius={4}>
+              <LabelList dataKey="eff" position="right" formatter={v => formatEff(v)} style={{ fill: '#94a3b8', fontSize: 11 }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -334,8 +341,8 @@ function PlayerContributionTable({ ranked, bestPlayer, t }) {
                   }`}>{score > 0 ? `+${score}` : score}</span>
                 </td>
                 <td className="text-center px-2 py-2 text-green-400 font-bold">{stats.totalPoints}</td>
-                <td className="text-center px-2 py-2 text-slate-300 text-xs">{pctStr(stats.pct2nd, stats.wins2nd, stats.attempts2nd)}</td>
-                <td className="text-center px-2 py-2 text-slate-300 text-xs">{pctStr(stats.pct3rd, stats.wins3rd, stats.attempts3rd)}</td>
+                <td className="text-center px-2 py-2 text-slate-300 text-xs"><EffValue eff={stats.attackEff2nd} attempts={stats.attempts2nd} /></td>
+                <td className="text-center px-2 py-2 text-slate-300 text-xs"><EffValue eff={stats.attackEff3rd} attempts={stats.attempts3rd} /></td>
                 <td className="text-center px-2 py-2 text-red-400">{stats.totalMistakes}</td>
               </tr>
             ))}
@@ -640,9 +647,9 @@ function FrontRowComboSection({ combos, t }) {
   }
 
   const sorted = [...combos].sort((a, b) => {
-    if (a.attackPct === null) return 1;
-    if (b.attackPct === null) return -1;
-    return b.attackPct - a.attackPct;
+    if (a.attackEff === null) return 1;
+    if (b.attackEff === null) return -1;
+    return b.attackEff - a.attackEff;
   });
 
   const eligible = sorted.filter(c => c.rallies > 2);
@@ -682,7 +689,7 @@ function FrontRowComboSection({ combos, t }) {
                   </td>
                   <td className="text-center px-2 py-2">
                     <span className={`font-bold text-xs ${isBest ? 'text-green-400' : isWorst ? 'text-red-400' : 'text-slate-300'}`}>
-                      {pctStr(c.attackPct, c.attackWins, c.attackAttempts)}
+                      <EffValue eff={c.attackEff} attempts={c.attackAttempts} />
                     </span>
                   </td>
                   <td className="text-center px-2 py-2 text-slate-300 text-xs">
@@ -816,9 +823,9 @@ function TeamStatistics({ teamStats, t }) {
     { label: t('totalPoints2'),       value: teamStats.totalPoints,        color: 'text-green-400' },
     { label: t('attAttempts'),        value: teamStats.totalAttackAttempts, color: 'text-white' },
     { label: t('killsLabel'),         value: teamStats.totalAttackWins,     color: 'text-blue-400' },
-    { label: t('teamAttackPctLabel'), value: teamStats.teamAttackPct !== null ? `${teamStats.teamAttackPct}%` : '—', color: 'text-blue-400' },
-    { label: t('team2ndBallPct'),     value: teamStats.team2ndPct !== null ? `${teamStats.team2ndPct}%` : '—', color: 'text-green-400' },
-    { label: t('team3rdBallPct'),     value: teamStats.team3rdPct !== null ? `${teamStats.team3rdPct}%` : '—', color: 'text-purple-400' },
+    { label: t('teamAttackPctLabel'), value: <EffValue eff={teamStats.teamAttackEff} attempts={teamStats.totalAttackAttempts} showAttempts={false} />, color: 'text-blue-400' },
+    { label: t('team2ndBallPct'),     value: <EffValue eff={teamStats.team2ndEff} attempts={teamStats.total2ndAttempts} showAttempts={false} />, color: 'text-green-400' },
+    { label: t('team3rdBallPct'),     value: <EffValue eff={teamStats.team3rdEff} attempts={teamStats.total3rdAttempts} showAttempts={false} />, color: 'text-purple-400' },
     { label: t('totalErrors2'),       value: teamStats.totalErrors,         color: 'text-red-400' },
     { label: t('totalBlockTouches'), value: teamStats.totalBlockTouches,   color: 'text-yellow-400' },
     { label: t('acesLabel'),          value: teamStats.totalAces,           color: 'text-yellow-400' },
@@ -960,15 +967,15 @@ function DetailedPlayerStats({ playerAdvancedList, players, t }) {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-slate-800 rounded-lg p-2">
                       <div className="text-slate-400">{t('secondBallWins')}</div>
-                      <div className="text-blue-400 font-bold">{pctStr(stats.pct2nd, stats.wins2nd, stats.attempts2nd)}</div>
+                      <div className="text-blue-400 font-bold"><EffValue eff={stats.attackEff2nd} attempts={stats.attempts2nd} /></div>
                     </div>
                     <div className="bg-slate-800 rounded-lg p-2">
                       <div className="text-slate-400">{t('thirdBallWins')}</div>
-                      <div className="text-green-400 font-bold">{pctStr(stats.pct3rd, stats.wins3rd, stats.attempts3rd)}</div>
+                      <div className="text-green-400 font-bold"><EffValue eff={stats.attackEff3rd} attempts={stats.attempts3rd} /></div>
                     </div>
                     <div className="bg-slate-800 rounded-lg p-2">
                       <div className="text-slate-400">{t('overallAttPct')}</div>
-                      <div className="text-white font-bold">{pctStr(stats.overallAttackPct, stats.totalAttackWins, stats.totalAttackAttempts)}</div>
+                      <div className="text-white font-bold"><EffValue eff={stats.attackEff} attempts={stats.totalAttackAttempts} /></div>
                     </div>
                     <div className="bg-slate-800 rounded-lg p-2">
                       <div className="text-slate-400">{t('attackErrors')}</div>

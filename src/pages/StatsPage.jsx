@@ -4,6 +4,8 @@ import { useMatch } from '../context/MatchContext';
 import { useLanguage } from '../context/LanguageContext';
 import { VIEWS } from '../utils/constants';
 import { calcPlayerStats, calcTeamStats, calcSetStats } from '../utils/stats';
+import { calcAdvancedPlayerStats, rankByContribution, pickBestPlayer } from '../utils/analysisStats';
+import EffValue from '../components/ui/EffValue';
 import { exportToExcel, exportToPDF } from '../utils/export';
 import AnalysisTab from './AnalysisTab';
 import ReassignPlayerModal from '../components/modals/ReassignPlayerModal';
@@ -31,10 +33,10 @@ function SetCard({ set, setNum, players, t }) {
   const stats = calcSetStats(set);
   const setEvents = set.events || [];
 
-  const topPlayers = players
-    .map(p => ({ player: p, stats: calcPlayerStats(p.id, setEvents) }))
+  // Same contribution ranking as everywhere else; only players active in this set
+  const topPlayers = rankByContribution(players.map(p => ({ player: p, stats: calcAdvancedPlayerStats(p.id, setEvents) })))
+    .map(({ player }) => ({ player, stats: calcPlayerStats(player.id, setEvents) }))
     .filter(({ stats }) => stats.totalEvents > 0)
-    .sort((a, b) => b.stats.points - a.stats.points)
     .slice(0, 4);
 
   return (
@@ -135,10 +137,9 @@ export default function StatsPage() {
   const filteredEvents = filteredSets.flatMap(s => s.events || []);
   const teamStats = calcTeamStats(filteredSets);
 
-  const playerStatsList = players.map(p => ({
-    player: p,
-    stats: calcPlayerStats(p.id, filteredEvents),
-  })).sort((a, b) => b.stats.points - a.stats.points);
+  // Top contributors use the shared contribution ranking (same as Players & Analysis tabs)
+  const rankedPlayers = rankByContribution(players.map(p => ({ player: p, stats: calcAdvancedPlayerStats(p.id, filteredEvents) })));
+  const bestPlayer = pickBestPlayer(rankedPlayers);
 
   async function handleExportExcel() {
     setExporting(true);
@@ -294,10 +295,8 @@ export default function StatsPage() {
                   size="lg"
                 />
                 <StatBadge
-                  value={teamStats.teamAttackPct !== null
-                    ? `${teamStats.teamAttackPct}% (${teamStats.allAttackSuccess}/${teamStats.allAttackTotal})`
-                    : '—'}
-                  label={t('attackPctLabel')}
+                  value={<EffValue eff={teamStats.teamAttackEff} attempts={teamStats.allAttackTotal} className="text-2xl" />}
+                  label={t('attackEffLabel')}
                   color="green"
                   size="lg"
                 />
@@ -362,26 +361,28 @@ export default function StatsPage() {
               <div className="px-4 py-3 border-b border-slate-700 text-slate-300 font-semibold text-sm flex items-center gap-2">
                 <User size={14} /> {t('topContributors')}
               </div>
-              {playerStatsList.slice(0, 5).map(({ player, stats }) => (
+              {rankedPlayers.slice(0, 5).map(({ player, stats, score }) => (
                 <div key={player.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-700/50 last:border-0">
                   <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
                     {player.number}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-white text-sm font-medium truncate">{player.name}</div>
+                    <div className="text-white text-sm font-medium truncate">
+                      {player.name}{bestPlayer?.player.id === player.id && <span className="ms-1">🏆</span>}
+                    </div>
                     <div className="text-slate-500 text-xs">{player.position}</div>
                   </div>
                   <div className="flex gap-4 text-center">
                     <div>
-                      <div className="text-green-400 font-bold">{stats.points}</div>
-                      <div className="text-slate-600 text-[10px]">{t('ptsLabel')}</div>
+                      <div className={`font-bold tabular-nums ${score > 0 ? 'text-yellow-400' : score < 0 ? 'text-red-400' : 'text-slate-500'}`} dir="ltr">{score > 0 ? `+${score}` : score}</div>
+                      <div className="text-slate-600 text-[10px]">{t('contributionScore')}</div>
                     </div>
                     <div>
-                      <div className="text-blue-400 font-bold">{stats.attackKills}</div>
+                      <div className="text-blue-400 font-bold">{stats.totalAttackWins}</div>
                       <div className="text-slate-600 text-[10px]">{t('killsLabel')}</div>
                     </div>
                     <div>
-                      <div className="text-red-400 font-bold">{stats.errors}</div>
+                      <div className="text-red-400 font-bold">{stats.totalMistakes}</div>
                       <div className="text-slate-600 text-[10px]">{t('errorsLabel')}</div>
                     </div>
                   </div>

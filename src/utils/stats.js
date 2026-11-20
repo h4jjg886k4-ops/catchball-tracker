@@ -1,4 +1,5 @@
 import { EVENT_TYPES as T, HOME_SCORE_EVENTS, OPPONENT_SCORE_EVENTS } from './constants';
+import { attackEfficiency as calcAttackEff } from './analysisStats';
 
 const ATTACK_WIN_TYPES  = new Set([T.ATTACK_WIN_2ND, T.ATTACK_WIN_3RD]);
 const ATTACK_CONT_TYPES = new Set([T.ATTACK_CONT_2ND, T.ATTACK_CONT_3RD]);
@@ -33,10 +34,13 @@ export function calcPlayerStats(playerId, events) {
   const attackBlocked= ev.filter(e => e.type === T.ATTACK_BLOCKED).length;
   const attackTotal  = attackAll.length;
 
-  // Standard efficiency: (kills − out − steps − blocked) / total
-  const attackEfficiency = attackTotal > 0
-    ? Math.round((attackKills - attackOut - attackSteps - attackBlocked) / attackTotal * 100)
-    : null;
+  // Standard volleyball efficiency (decimal): (kills − errors − blocked) / attempts
+  const attackEfficiency = calcAttackEff({
+    kills: attackKills,
+    errors: attackOut + attackSteps + ev.filter(e => e.type === T.ATTACK_NET_TOUCH).length,
+    blocked: attackBlocked,
+    cont: attackContTotal,
+  }).eff;
 
   const servePct = serveAll.length > 0
     ? Math.round((serveAll.length - serveErrors) / serveAll.length * 100)
@@ -82,7 +86,7 @@ export function calcPlayerStats(playerId, events) {
     serveTotal: serveAll.length,
     serveErrors,
     servePct,
-    // Attack (keep `attackKills` and `attackPct` for backward-compat with StatsPage)
+    // Attack (`attackKills` kept for StatsPage)
     attackKills,
     attackKills2nd: attackKills2,
     attackKills3rd: attackKills3,
@@ -91,7 +95,6 @@ export function calcPlayerStats(playerId, events) {
     attackSteps,
     attackBlocked,
     attackTotal,
-    attackPct: attackEfficiency,   // alias kept for StatsPage grid
     attackEfficiency,
     // Defense
     defenseSuccess,
@@ -140,16 +143,16 @@ export function calcTeamStats(sets) {
   const allAttackWin  = allEvents.filter(e => ATTACK_WIN_TYPES.has(e.type)).length;
   const allAttackErr  = allEvents.filter(e => ATTACK_ERR_TYPES.has(e.type)).length;
   const allAttackCont = allEvents.filter(e => ATTACK_CONT_TYPES.has(e.type)).length;
-  const allAttackTotal = allAttackWin + allAttackErr + allAttackCont;
-  const teamAttackPct = allAttackTotal > 0
-    ? Math.round((allAttackWin - allAttackErr) / allAttackTotal * 100)
-    : null;
+  const allAttackBlocked = allEvents.filter(e => e.type === T.ATTACK_BLOCKED).length;
+  const { eff: teamAttackEff, attempts: allAttackTotal } = calcAttackEff({
+    kills: allAttackWin, errors: allAttackErr - allAttackBlocked, blocked: allAttackBlocked, cont: allAttackCont,
+  });
 
   return {
     serveEffWins,
     serveEffTotal,
     serveEffPct: serveEffTotal > 0 ? Math.round(serveEffWins / serveEffTotal * 100) : null,
-    teamAttackPct,
+    teamAttackEff,
     allAttackSuccess: allAttackWin,
     allAttackError: allAttackErr,
     allAttackTotal,

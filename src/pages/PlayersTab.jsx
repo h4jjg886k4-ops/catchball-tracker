@@ -9,6 +9,7 @@ import {
 import {
   calcAdvancedPlayerStats, calcContributionParts, rankByContribution, pickBestPlayer,
 } from '../utils/analysisStats';
+import EffValue from '../components/ui/EffValue';
 
 // Radar series colors (dark categorical slots). Validated all-pairs on the card
 // surface #1e293b — overlapping polygons need every pair distinct, and no set
@@ -23,7 +24,6 @@ const TOOLTIP_STYLE = {
 };
 
 const fmtScore = s => (s > 0 ? `+${s}` : String(s));
-const pct = (num, den) => (den > 0 ? Math.round(num / den * 100) : null);
 const clamp10 = v => Math.max(0, Math.min(10, Math.round(v * 10) / 10));
 
 function buildRows(players, events) {
@@ -32,15 +32,15 @@ function buildRows(players, events) {
     const { pos, neg } = calcContributionParts(stats);
     return {
       player, stats, score, pos, neg,
-      attackPct: pct(stats.totalAttackWins, stats.totalAttackAttempts),
-      pct2nd: stats.pct2nd,
-      pct3rd: stats.pct3rd,
       serveKey: stats.aces + stats.serveErrors > 0 ? stats.aces - stats.serveErrors : null,
       blockKey: stats.blockTouches + stats.blocks > 0 ? stats.blockTouches + stats.blocks * 2 : null,
       errors: stats.totalMistakes,
     };
   });
 }
+
+// Attack efficiency (−1…+1) on the 0–10 scale: 0 = −1.000, 5 = break-even, 10 = +1.000
+const effTo10 = eff => (eff === null ? 0 : clamp10((eff + 1) * 5));
 
 // Six axes on a 0–10 scale. Ratios are absolute; counts are relative to the
 // best player in the current set filter so the shape compares teammates.
@@ -49,10 +49,11 @@ function radarScores(row, maxBlock, maxDefense, maxErrors) {
   const serveTotal = s.aces + s.serveErrors;
   return {
     serve:   serveTotal > 0 ? clamp10(s.aces / serveTotal * 10) : 0,
-    attack2: s.pct2nd !== null ? clamp10(s.pct2nd / 10) : 0,
-    attack3: s.pct3rd !== null ? clamp10(s.pct3rd / 10) : 0,
+    attack2: effTo10(s.attackEff2nd),
+    attack3: effTo10(s.attackEff3rd),
     block:   maxBlock > 0 ? clamp10((s.blockTouches + s.blocks) / maxBlock * 10) : 0,
-    defense: maxDefense > 0 ? clamp10(s.defenseSuccess / maxDefense * 10) : 0,
+    // Defense = block touches (the positive defensive action the live screen records)
+    defense: maxDefense > 0 ? clamp10(s.blockTouches / maxDefense * 10) : 0,
     errors:  maxErrors > 0 ? clamp10((1 - s.totalMistakes / maxErrors) * 10) : 10,
   };
 }
@@ -61,9 +62,9 @@ const COLUMNS = [
   { id: 'player',    labelKey: 'colPlayer',  sortVal: r => Number(r.player.number) || 0, align: 'start' },
   { id: 'score',     labelKey: 'colScore',   sortVal: r => r.score },
   { id: 'serve',     labelKey: 'colServe',   sortVal: r => r.serveKey },
-  { id: 'attack',    labelKey: 'colAttack',  sortVal: r => r.attackPct },
-  { id: 'attack2',   labelKey: 'col2nd',     sortVal: r => r.pct2nd },
-  { id: 'attack3',   labelKey: 'col3rd',     sortVal: r => r.pct3rd },
+  { id: 'attack',    labelKey: 'colAttack',  sortVal: r => r.stats.attackEff },
+  { id: 'attack2',   labelKey: 'col2nd',     sortVal: r => r.stats.attackEff2nd },
+  { id: 'attack3',   labelKey: 'col3rd',     sortVal: r => r.stats.attackEff3rd },
   { id: 'block',     labelKey: 'colBlock',   sortVal: r => r.blockKey },
   { id: 'errors',    labelKey: 'colErrors',  sortVal: r => r.errors },
 ];
@@ -123,7 +124,7 @@ export default function PlayersTab({ players, events, t }) {
 
   const radarData = useMemo(() => {
     const maxBlock   = Math.max(0, ...rows.map(r => r.stats.blockTouches + r.stats.blocks));
-    const maxDefense = Math.max(0, ...rows.map(r => r.stats.defenseSuccess));
+    const maxDefense = Math.max(0, ...rows.map(r => r.stats.blockTouches));
     const maxErrors  = Math.max(0, ...rows.map(r => r.stats.totalMistakes));
     const scores = Object.fromEntries(rows.map(r => [r.player.id, radarScores(r, maxBlock, maxDefense, maxErrors)]));
     const axes = [
@@ -141,8 +142,8 @@ export default function PlayersTab({ players, events, t }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, t, isRTL]);
 
-  const barData = useMemo(() => [...selectedRows]
-    .sort((a, b) => b.score - a.score)
+  // rows are already in contribution order (rankByContribution)
+  const barData = useMemo(() => selectedRows
     .map(r => ({
       name: `#${r.player.number} ${r.player.name}`,
       pos: r.pos,
@@ -152,9 +153,6 @@ export default function PlayersTab({ players, events, t }) {
 
   // ── Cell renderers ────────────────────────────────────────────────────────
   const dash = <span className="text-slate-600">—</span>;
-  const pctCell = (p, num, den) => (p === null ? dash : (
-    <span dir="ltr">{p}% <span className="text-slate-500">({num}/{den})</span></span>
-  ));
 
   return (
     <div className="space-y-4">
@@ -197,9 +195,9 @@ export default function PlayersTab({ players, events, t }) {
                     <td className="px-2 py-1.5 text-center text-slate-300 tabular-nums whitespace-nowrap" dir="ltr">
                       {s.aces + s.serveErrors > 0 ? t('serveCellFmt', { a: s.aces, e: s.serveErrors }) : dash}
                     </td>
-                    <td className="px-2 py-1.5 text-center text-slate-300 tabular-nums whitespace-nowrap">{pctCell(r.attackPct, s.totalAttackWins, s.totalAttackAttempts)}</td>
-                    <td className="px-2 py-1.5 text-center text-slate-300 tabular-nums whitespace-nowrap">{pctCell(s.pct2nd, s.wins2nd, s.attempts2nd)}</td>
-                    <td className="px-2 py-1.5 text-center text-slate-300 tabular-nums whitespace-nowrap">{pctCell(s.pct3rd, s.wins3rd, s.attempts3rd)}</td>
+                    <td className="px-2 py-1.5 text-center text-slate-300"><EffValue eff={s.attackEff} attempts={s.totalAttackAttempts} /></td>
+                    <td className="px-2 py-1.5 text-center text-slate-300"><EffValue eff={s.attackEff2nd} attempts={s.attempts2nd} /></td>
+                    <td className="px-2 py-1.5 text-center text-slate-300"><EffValue eff={s.attackEff3rd} attempts={s.attempts3rd} /></td>
                     <td className="px-2 py-1.5 text-center text-slate-300 tabular-nums whitespace-nowrap" dir="ltr">
                       {s.blockTouches + s.blocks > 0 ? t('blockCellFmt', { t: s.blockTouches, k: s.blocks }) : dash}
                     </td>
